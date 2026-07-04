@@ -30,3 +30,11 @@ AppTemplateBase is a reusable local-first desktop application template for build
 - `docs/` architecture and implementation documentation
 
 This repository currently contains the initial project structure only. Runtime implementation is intentionally deferred.
+
+## Current Commands
+
+From the repository root:
+
+- `npm start` runs the frontend development server
+- `npm run build` builds the frontend
+- `npm run typecheck` runs the frontend TypeScript check
