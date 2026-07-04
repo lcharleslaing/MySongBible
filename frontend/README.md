@@ -13,6 +13,6 @@ This frontend is a Vite + React + TypeScript renderer application styled with Ta
 ## Commands
 
 - `npm install`
-- `npm run dev`
+- `npm start`
 - `npm run build`
 - `npm run typecheck`
