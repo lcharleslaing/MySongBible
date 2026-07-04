@@ -79,6 +79,16 @@ local_models/
 artifacts/
 generated_audio/
 generated_transcripts/
+recordings/
+transcripts/
+voice_samples/
+*.gguf
+*.onnx
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.safetensors
 
 # Backend runtime files
 backend/.cache/

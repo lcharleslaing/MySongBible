@@ -70,3 +70,5 @@ From `backend/`:
 - Renderer filesystem access stays behind the Electron preload bridge.
 
 Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues.
+
+If you are using this repository as a base for a new product, start with [TEMPLATE_USAGE.md](TEMPLATE_USAGE.md).
