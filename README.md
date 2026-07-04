@@ -35,6 +35,8 @@ This repository currently contains the initial project structure only. Runtime i
 
 From the repository root:
 
-- `npm start` runs the frontend development server
+- `npm start` runs the desktop app in development mode
+- `npm run frontend:dev` runs the Vite renderer only
+- `npm run electron:dev` runs Electron against the Vite dev server
 - `npm run build` builds the frontend
 - `npm run typecheck` runs the frontend TypeScript check

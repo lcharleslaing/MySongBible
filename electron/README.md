@@ -1,17 +1,18 @@
 # Electron Layer
 
-This directory is reserved for the desktop shell.
+This directory contains the desktop wrapper for AppTemplateBase.
 
-Planned responsibilities:
+## Current Scope
 
-- application startup and shutdown
-- BrowserWindow lifecycle
-- preload bridge
-- backend process orchestration
-- desktop-only integrations such as file dialogs and app paths
+- Electron main process and window lifecycle
+- secure preload bridge
+- development loading from the Vite dev server
+- production loading from the built frontend
+- simple backend child-process management
+- placeholder desktop IPC methods
 
-Suggested internal layout:
+## IPC Methods
 
-- `main/` Electron main process files
-- `preload/` secure renderer bridge
-- `assets/` desktop icons and packaged resources
+- `desktop.getAppVersion()`
+- `desktop.checkBackendHealth()`
+- `desktop.openLogsFolder()`

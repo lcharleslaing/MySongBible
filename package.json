@@ -2,12 +2,23 @@
   "name": "apptemplatebase",
   "private": true,
   "version": "0.1.0",
-  "workspaces": [
-    "frontend"
-  ],
+  "main": "electron/main/index.cjs",
+  "workspaces": ["frontend"],
   "scripts": {
-    "start": "npm --prefix frontend start",
-    "build": "npm --prefix frontend run build",
-    "typecheck": "npm --prefix frontend run typecheck"
+    "start": "npm run dev",
+    "dev": "concurrently -k \"npm:frontend:dev\" \"npm:electron:dev\"",
+    "frontend:dev": "npm --prefix frontend start",
+    "electron:dev": "wait-on tcp:127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .",
+    "electron:smoke": "npm run build:frontend && cross-env APP_TEMPLATE_SMOKE=1 APP_TEMPLATE_RENDERER_MODE=dist electron .",
+    "build": "npm run build:frontend",
+    "build:frontend": "npm --prefix frontend run build",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "package": "npm run build:frontend && echo \"Packaging is not configured yet.\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.0.0",
+    "electron": "^31.7.7",
+    "wait-on": "^8.0.5"
   }
 }

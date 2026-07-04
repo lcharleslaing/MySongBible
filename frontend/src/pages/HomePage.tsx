@@ -1,4 +1,5 @@
 import { PageHeader } from "../components/ui/PageHeader";
+import { DesktopInfoCard } from "../components/desktop/DesktopInfoCard";
 
 const quickStartItems = [
   "Desktop shell reserved for Electron integration",
@@ -40,6 +41,8 @@ export function HomePage() {
           </div>
         </section>
       </div>
+
+      <DesktopInfoCard />
     </div>
   );
 }
