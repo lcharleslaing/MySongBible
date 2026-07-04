@@ -1,19 +1,28 @@
 # Backend Layer
 
-This directory is reserved for the FastAPI backend.
+This backend is a local FastAPI service intended to run behind the desktop shell.
 
-Planned responsibilities:
+## Stack
 
-- HTTP API routes
-- application services
-- SQLite database access
-- runtime configuration
-- local speech modules
+- FastAPI
+- SQLModel
+- SQLite
+- Pydantic settings
+- pytest
 
-Suggested internal layout:
+## Current Scope
 
-- `app/api/` route definitions
-- `app/core/` configuration, logging, lifecycle
-- `app/db/` models, sessions, repositories
-- `app/local_ai/` local STT/TTS modules
-- `tests/` backend tests
+- local FastAPI app
+- SQLite-backed persistence
+- environment-driven settings
+- startup database initialization
+- transcript CRUD service
+- placeholder voice status routes
+
+## Commands
+
+- `python -m venv .venv`
+- `source .venv/bin/activate`
+- `pip install -e .[dev]`
+- `uvicorn app.main:app --reload`
+- `pytest`
