@@ -1,12 +1,142 @@
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+
+import { ApiError } from "../api/client";
+import { TranscriptRecord, transcribeAudioRecording } from "../api/stt";
 import { PageHeader } from "../components/ui/PageHeader";
+import { useAudioRecorder } from "../features/voice-lab/useAudioRecorder";
+
+type AudioSource = {
+  blob: Blob;
+  fileName: string;
+  mimeType: string;
+  sourceLabel: string;
+  previewUrl: string;
+};
 
 export function VoiceLabPage() {
+  const {
+    audioBlob: recordedAudioBlob,
+    audioUrl: recordedAudioUrl,
+    fileName: recordedFileName,
+    formatCompatibilityWarning,
+    isRecording,
+    mimeType: recordedMimeType,
+    recorderError,
+    resetRecording,
+    startRecording,
+    stopRecording,
+  } = useAudioRecorder();
+  const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
+  const [selectedAudioUrl, setSelectedAudioUrl] = useState("");
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptRecord, setTranscriptRecord] = useState<TranscriptRecord | null>(null);
+  const [transcriptionError, setTranscriptionError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (selectedAudioUrl) {
+        URL.revokeObjectURL(selectedAudioUrl);
+      }
+    };
+  }, [selectedAudioUrl]);
+
+  const activeAudioSource = useMemo<AudioSource | null>(() => {
+    if (selectedAudioFile && selectedAudioUrl) {
+      return {
+        blob: selectedAudioFile,
+        fileName: selectedAudioFile.name,
+        mimeType: selectedAudioFile.type || "audio/mpeg",
+        sourceLabel: "Local audio file",
+        previewUrl: selectedAudioUrl,
+      };
+    }
+
+    if (recordedAudioBlob && recordedAudioUrl) {
+      return {
+        blob: recordedAudioBlob,
+        fileName: recordedFileName,
+        mimeType: recordedMimeType,
+        sourceLabel: "Recorded clip",
+        previewUrl: recordedAudioUrl,
+      };
+    }
+
+    return null;
+  }, [recordedAudioBlob, recordedAudioUrl, recordedFileName, recordedMimeType, selectedAudioFile, selectedAudioUrl]);
+
+  const handleAudioFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) {
+      return;
+    }
+
+    if (selectedAudioUrl) {
+      URL.revokeObjectURL(selectedAudioUrl);
+    }
+
+    const nextUrl = URL.createObjectURL(file);
+    setSelectedAudioFile(file);
+    setSelectedAudioUrl(nextUrl);
+    setTranscriptionError("");
+    setSuccessMessage("");
+  };
+
+  const clearSelectedAudioFile = () => {
+    if (selectedAudioUrl) {
+      URL.revokeObjectURL(selectedAudioUrl);
+    }
+
+    setSelectedAudioFile(null);
+    setSelectedAudioUrl("");
+  };
+
+  const sendForTranscription = async () => {
+    if (!activeAudioSource) {
+      setTranscriptionError("Record audio or choose an audio file before sending it to the transcription service.");
+      setSuccessMessage("");
+      return;
+    }
+
+    setIsTranscribing(true);
+    setTranscriptionError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await transcribeAudioRecording({
+        audioBlob: activeAudioSource.blob,
+        fileName: activeAudioSource.fileName,
+        title: `Voice Lab ${new Date().toLocaleString()}`,
+      });
+      setTranscriptRecord(result);
+      setSuccessMessage("Transcription completed successfully.");
+    } catch (error) {
+      if (error instanceof ApiError) {
+        const details = error.details as
+          | { detail?: string | { message?: string } }
+          | null
+          | undefined;
+        const message =
+          typeof details?.detail === "object"
+            ? details.detail?.message || error.message
+            : typeof details?.detail === "string"
+              ? details.detail
+              : error.message;
+        setTranscriptionError(message || "Transcription request failed.");
+      } else {
+        setTranscriptionError(error instanceof Error ? error.message : "Transcription request failed.");
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Voice Lab"
         title="Speech workflow playground"
-        description="This page is scaffolded for local STT and TTS flows. Buttons are placeholders until backend voice services are connected."
+        description="Record a short clip with the local microphone or choose an existing audio file, then send it to the backend Whisper.cpp transcription endpoint."
       />
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -14,21 +144,141 @@ export function VoiceLabPage() {
           <div className="card-body gap-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="card-title">Speech to Text</h2>
-              <span className="badge badge-outline">Placeholder</span>
+              <span className={`badge ${isRecording ? "badge-error" : transcriptRecord ? "badge-success" : "badge-outline"}`}>
+                {isRecording ? "Recording" : transcriptRecord ? "Transcribed" : "Ready"}
+              </span>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button type="button" className="btn btn-primary" disabled>
-                Record
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={isRecording || isTranscribing}
+                onClick={startRecording}
+              >
+                Start Recording
               </button>
-              <button type="button" className="btn btn-outline" disabled>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={!isRecording || isTranscribing}
+                onClick={stopRecording}
+              >
+                Stop Recording
+              </button>
+              <button
+                type="button"
+                className={`btn btn-secondary ${isTranscribing ? "loading" : ""}`}
+                disabled={!activeAudioSource || isRecording || isTranscribing}
+                onClick={sendForTranscription}
+              >
                 Transcribe
               </button>
+              <button type="button" className="btn btn-ghost" disabled={isRecording || isTranscribing} onClick={resetRecording}>
+                Reset Recording
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={!selectedAudioFile || isRecording || isTranscribing}
+                onClick={clearSelectedAudioFile}
+              >
+                Clear File
+              </button>
             </div>
-            <div className="rounded-box min-h-56 border border-base-300 bg-base-200 p-4">
-              <p className="text-sm font-medium text-base-content/70">Transcript Output</p>
-              <p className="mt-4 text-sm text-base-content/50">
-                Transcript text will appear here after local audio capture and transcription are wired in.
-              </p>
+
+            <label className="form-control gap-2">
+              <span className="label-text font-medium">Or choose a local audio file</span>
+              <input
+                type="file"
+                accept=".mp3,.ogg,.wav,.flac,audio/mpeg,audio/ogg,audio/wav,audio/flac"
+                className="file-input file-input-bordered w-full"
+                onChange={handleAudioFileSelection}
+                disabled={isRecording || isTranscribing}
+              />
+              <span className="label-text-alt text-base-content/60">
+                Use this when you want to send an existing MP3, WAV, OGG, or FLAC file instead of a fresh recording.
+              </span>
+            </label>
+
+            {activeAudioSource ? (
+              <div className="flex flex-wrap gap-2 text-xs text-base-content/60">
+                <span className="badge badge-outline">{activeAudioSource.sourceLabel}</span>
+                <span className="badge badge-outline">{activeAudioSource.fileName}</span>
+                {activeAudioSource.mimeType ? (
+                  <span className="badge badge-outline">{activeAudioSource.mimeType}</span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {formatCompatibilityWarning && !selectedAudioFile ? (
+              <div className="alert alert-warning">
+                <span className="text-sm">{formatCompatibilityWarning}</span>
+              </div>
+            ) : null}
+
+            {recorderError ? (
+              <div className="alert alert-error">
+                <span className="text-sm">{recorderError}</span>
+              </div>
+            ) : null}
+
+            {transcriptionError ? (
+              <div className="alert alert-error">
+                <span className="text-sm">{transcriptionError}</span>
+              </div>
+            ) : null}
+
+            {successMessage ? (
+              <div className="alert alert-success">
+                <span className="text-sm">{successMessage}</span>
+              </div>
+            ) : null}
+
+            <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-box border border-base-300 bg-base-200 p-4">
+                <p className="text-sm font-medium text-base-content/70">Audio Preview</p>
+                {activeAudioSource ? (
+                  <div className="mt-4 space-y-3">
+                    <audio className="w-full" controls src={activeAudioSource.previewUrl}>
+                      <track kind="captions" />
+                    </audio>
+                    <p className="text-xs text-base-content/60">
+                      The selected audio source will be uploaded as a single file-based transcription request.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-base-content/50">
+                    No audio selected yet. Record a clip or choose a local file to preview it here.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-box min-h-56 border border-base-300 bg-base-200 p-4">
+                <p className="text-sm font-medium text-base-content/70">Transcript Output</p>
+                {isTranscribing ? (
+                  <div className="mt-4 flex items-center gap-3 text-sm text-base-content/60">
+                    <span className="loading loading-spinner loading-sm" />
+                    <span>Sending audio to the backend transcription service...</span>
+                  </div>
+                ) : transcriptRecord ? (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="badge badge-outline">#{transcriptRecord.id}</span>
+                      <span className="badge badge-outline">{transcriptRecord.stt_engine}</span>
+                      {transcriptRecord.stt_model ? (
+                        <span className="badge badge-outline">{transcriptRecord.stt_model}</span>
+                      ) : null}
+                    </div>
+                    <div className="whitespace-pre-wrap text-sm text-base-content/80">
+                      {transcriptRecord.transcript_text}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-base-content/50">
+                    Transcript text will appear here after the audio file is sent to `/api/stt/transcribe`.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </section>
