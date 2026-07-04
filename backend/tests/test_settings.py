@@ -8,4 +8,7 @@ def test_settings_endpoint(client: TestClient) -> None:
     payload = response.json()
     assert "app_name" in payload
     assert "database_url" in payload
-    assert "default_tts_engine" in payload
+    assert "tts_engine" in payload
+    assert "whisper_thread_count" in payload
+    assert "audio_input_dir" in payload
+    assert "tts_output_dir" in payload

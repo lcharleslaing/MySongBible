@@ -23,6 +23,22 @@ declare global {
         canceled: boolean;
         path: string | null;
       }>;
+      pickPiperBinary: () => Promise<{
+        canceled: boolean;
+        path: string | null;
+      }>;
+      pickPiperModel: () => Promise<{
+        canceled: boolean;
+        path: string | null;
+      }>;
+      pickAudioInputDirectory: () => Promise<{
+        canceled: boolean;
+        path: string | null;
+      }>;
+      pickAudioOutputDirectory: () => Promise<{
+        canceled: boolean;
+        path: string | null;
+      }>;
       pickSqliteDatabase: () => Promise<{
         canceled: boolean;
         path: string | null;

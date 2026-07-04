@@ -9,15 +9,25 @@ export type SettingsRecord = {
   whisper_cpp_binary: string | null;
   whisper_model_path: string | null;
   whisper_thread_count: number;
+  audio_input_dir: string;
   keep_uploaded_audio_files: boolean;
   default_stt_model: string | null;
   default_tts_engine: string;
+  tts_engine: string;
+  piper_binary: string | null;
+  piper_model_path: string | null;
+  tts_output_dir: string | null;
 };
 
 export type SettingsUpdatePayload = {
   whisper_cpp_binary: string | null;
   whisper_model_path: string | null;
-  default_tts_engine: string;
+  whisper_thread_count: number;
+  tts_engine: string;
+  piper_binary: string | null;
+  piper_model_path: string | null;
+  audio_input_dir: string;
+  tts_output_dir: string;
   sqlite_database_path: string;
 };
 

@@ -86,6 +86,58 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
     };
   });
 
+  ipcMain.handle("desktop:pick-piper-binary", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Piper Binary",
+      properties: ["openFile"],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
+  ipcMain.handle("desktop:pick-piper-model", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Piper Model",
+      properties: ["openFile"],
+      filters: [
+        { name: "Piper Models", extensions: ["onnx", "json"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
+  ipcMain.handle("desktop:pick-audio-input-directory", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Audio Input Directory",
+      properties: ["openDirectory", "createDirectory"],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
+  ipcMain.handle("desktop:pick-audio-output-directory", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Audio Output Directory",
+      properties: ["openDirectory", "createDirectory"],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
   ipcMain.handle("desktop:pick-sqlite-database", async () => {
     const result = await dialog.showSaveDialog(getActiveWindow(BrowserWindow), {
       title: "Select SQLite Database Path",

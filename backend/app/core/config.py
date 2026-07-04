@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("WHISPER_MODEL_PATH", "WHISPER_MODEL_DIR"),
     )
     whisper_thread_count: int = 4
+    audio_input_dir_override: Path | None = Field(default=None, validation_alias=AliasChoices("AUDIO_INPUT_DIR"))
     keep_uploaded_audio_files: bool = True
     default_stt_model: str | None = None
     tts_engine: str = Field(
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     @field_validator(
         "whisper_cpp_binary",
         "whisper_model_path",
+        "audio_input_dir_override",
         "piper_binary",
         "piper_model_path",
         "default_stt_model",
@@ -62,6 +64,7 @@ class Settings(BaseSettings):
         "app_data_dir",
         "whisper_cpp_binary",
         "whisper_model_path",
+        "audio_input_dir_override",
         "piper_binary",
         "piper_model_path",
         "tts_output_dir",
@@ -75,7 +78,7 @@ class Settings(BaseSettings):
 
     @property
     def audio_input_dir(self) -> Path:
-        return self.app_data_dir / "audio" / "input"
+        return self.audio_input_dir_override or (self.app_data_dir / "audio" / "input")
 
     @property
     def audio_tts_dir(self) -> Path:

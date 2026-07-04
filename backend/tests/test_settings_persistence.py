@@ -7,7 +7,12 @@ def test_settings_can_be_updated_and_reloaded(client: TestClient) -> None:
         json={
             "whisper_cpp_binary": "/tmp/whisper-cli",
             "whisper_model_path": "/tmp/ggml-base.en.bin",
-            "default_tts_engine": "piper",
+            "whisper_thread_count": 6,
+            "tts_engine": "piper",
+            "piper_binary": "/tmp/piper",
+            "piper_model_path": "/tmp/piper-model.onnx",
+            "audio_input_dir": "/tmp/audio-input",
+            "tts_output_dir": "/tmp/audio-output",
             "sqlite_database_path": "./data/custom.sqlite3",
         },
     )
@@ -16,7 +21,12 @@ def test_settings_can_be_updated_and_reloaded(client: TestClient) -> None:
     payload = update_response.json()
     assert payload["whisper_cpp_binary"] == "/tmp/whisper-cli"
     assert payload["whisper_model_path"] == "/tmp/ggml-base.en.bin"
-    assert payload["default_tts_engine"] == "piper"
+    assert payload["whisper_thread_count"] == 6
+    assert payload["tts_engine"] == "piper"
+    assert payload["piper_binary"] == "/tmp/piper"
+    assert payload["piper_model_path"] == "/tmp/piper-model.onnx"
+    assert payload["audio_input_dir"] == "/tmp/audio-input"
+    assert payload["tts_output_dir"] == "/tmp/audio-output"
     assert payload["sqlite_database_path"] == "./data/custom.sqlite3"
     assert payload["database_url"] == "sqlite:///./data/custom.sqlite3"
 
@@ -26,4 +36,9 @@ def test_settings_can_be_updated_and_reloaded(client: TestClient) -> None:
     reloaded = get_response.json()
     assert reloaded["whisper_cpp_binary"] == "/tmp/whisper-cli"
     assert reloaded["whisper_model_path"] == "/tmp/ggml-base.en.bin"
-    assert reloaded["default_tts_engine"] == "piper"
+    assert reloaded["whisper_thread_count"] == 6
+    assert reloaded["tts_engine"] == "piper"
+    assert reloaded["piper_binary"] == "/tmp/piper"
+    assert reloaded["piper_model_path"] == "/tmp/piper-model.onnx"
+    assert reloaded["audio_input_dir"] == "/tmp/audio-input"
+    assert reloaded["tts_output_dir"] == "/tmp/audio-output"
