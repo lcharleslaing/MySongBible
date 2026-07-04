@@ -5,6 +5,6 @@ class VoiceStatusResponse(BaseModel):
     status: str
     stt_engine: str
     tts_engine: str
-    whisper_cpp_path: str | None
-    whisper_model_dir: str | None
+    whisper_cpp_binary: str | None
+    whisper_model_path: str | None
     message: str
