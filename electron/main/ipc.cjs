@@ -26,7 +26,19 @@ async function checkBackendHealth(healthUrl) {
   }
 }
 
-function registerDesktopIpc({ app, ipcMain, shell, backendController }) {
+function getActiveWindow(BrowserWindow) {
+  return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+}
+
+function normalizeSelectedPath(filePaths) {
+  if (!Array.isArray(filePaths) || filePaths.length === 0) {
+    return null;
+  }
+
+  return filePaths[0];
+}
+
+function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backendController }) {
   ipcMain.handle("desktop:get-app-version", () => app.getVersion());
 
   ipcMain.handle("desktop:check-backend-health", async () => {
@@ -43,6 +55,50 @@ function registerDesktopIpc({ app, ipcMain, shell, backendController }) {
       ok: result === "",
       path: logsDir,
       message: result || null,
+    };
+  });
+
+  ipcMain.handle("desktop:pick-whisper-binary", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Whisper Binary",
+      properties: ["openFile"],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
+  ipcMain.handle("desktop:pick-whisper-model", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Whisper Model",
+      properties: ["openFile"],
+      filters: [
+        { name: "Whisper Models", extensions: ["bin", "gguf"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
+  ipcMain.handle("desktop:pick-sqlite-database", async () => {
+    const result = await dialog.showSaveDialog(getActiveWindow(BrowserWindow), {
+      title: "Select SQLite Database Path",
+      defaultPath: "app_template_base.sqlite3",
+      filters: [
+        { name: "SQLite Databases", extensions: ["sqlite3", "sqlite", "db"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: result.canceled ? null : result.filePath || null,
     };
   });
 }

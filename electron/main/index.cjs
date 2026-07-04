@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 
 const { registerDesktopIpc } = require("./ipc.cjs");
 const { startBackendProcess, stopBackendProcess } = require("./backend.cjs");
@@ -72,6 +72,8 @@ async function bootstrap() {
 
   registerDesktopIpc({
     app,
+    BrowserWindow,
+    dialog,
     ipcMain,
     shell,
     backendController,
