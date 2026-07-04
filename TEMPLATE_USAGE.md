@@ -106,7 +106,7 @@ Do not commit real runtime data. The repository ignore rules already exclude:
 
 All speech tooling stays local-only.
 
-Set machine-specific paths in `.env` or through the desktop Settings UI:
+Set machine-specific backend defaults in `backend/.env` or use the desktop Settings UI for editable voice/audio paths:
 
 ```env
 WHISPER_CPP_BINARY=/absolute/path/to/whisper-cli
