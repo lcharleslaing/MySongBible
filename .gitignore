@@ -10,6 +10,8 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.app-template-state.json
+.template-initialized
 
 # Node / frontend / Electron
 node_modules/

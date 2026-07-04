@@ -4,6 +4,7 @@ const { spawn } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const backendDir = path.join(repoRoot, "backend");
+const templateInitScript = path.join(repoRoot, "scripts", "template", "init-template.cjs");
 const bootstrapOnly = process.argv.includes("--bootstrap-only");
 const isWindows = process.platform === "win32";
 const npmCommand = isWindows ? "npm.cmd" : "npm";
@@ -259,6 +260,8 @@ function printWhisperReminder() {
 }
 
 async function main() {
+  logStep("Running template initialization checks.");
+  await runCommand(process.execPath, [templateInitScript]);
   await ensureRootNodeModules();
   await ensureBackendVenv();
   await ensureBackendDependencies();

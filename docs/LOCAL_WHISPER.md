@@ -8,7 +8,7 @@ Example values:
 
 ```env
 WHISPER_CPP_BINARY=/home/llaing/whisper.cpp/build/bin/whisper-cli
-WHISPER_MODEL_PATH=/home/llaing/whisper.cpp/models/ggml-base.en.bin
+WHISPER_MODEL_PATH=/home/llaing/whisper.cpp/models/ggml-tiny.en.bin
 WHISPER_THREAD_COUNT=4
 WHISPER_TIMEOUT_SECONDS=120
 KEEP_UPLOADED_AUDIO_FILES=true
@@ -18,6 +18,8 @@ ALLOWED_AUDIO_EXTENSIONS=wav,mp3,ogg,flac,m4a
 
 ## Behavior
 
+- first-run template initialization prefers `ggml-tiny.en.bin` for speed, then falls back to `ggml-base.en.bin`, then `ggml-small.en.bin` when those files exist locally
+- change `WHISPER_MODEL_PATH` in `backend/.env` if you want to use base, small, or a larger local model
 - uploaded audio is stored under `APP_DATA_DIR/audio/input`
 - `whisper-cli` is invoked through `subprocess.run(...)`
 - transcription is aborted with a structured timeout error after `WHISPER_TIMEOUT_SECONDS`

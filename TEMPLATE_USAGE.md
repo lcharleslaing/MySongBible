@@ -17,7 +17,27 @@ If you are using a remote template flow instead, the important part is the same:
 
 ## 2. Rename the App
 
-Update these template-facing values first.
+On first `npm start`, AppTemplateBase detects the current folder name and updates a small set of safe identity fields if they still contain the original template identity. It then writes an ignored `.app-template-state.json` marker so later starts skip identity setup.
+
+The automatic setup updates:
+
+- root `package.json` `name`
+- `frontend/package.json` `name`
+- `frontend/index.html` title
+- visible frontend sidebar template title
+- `README.md` title when it is still exactly `# AppTemplateBase`
+
+The automatic setup does not change Git remotes, rename folders, rewrite historical docs, rename Python packages/modules, or change architecture decisions.
+
+To force it to run again:
+
+```bash
+npm run template:init
+# or
+TEMPLATE_INIT_FORCE=1 npm start
+```
+
+If you want to rename more fields manually, update these template-facing values.
 
 ### App Name
 
@@ -118,6 +138,8 @@ PIPER_MODEL_PATH=/absolute/path/to/piper-model.onnx
 
 No cloud STT or TTS assumptions are built into the template.
 
+`npm start` creates `backend/.env` when missing. On this development machine it also writes the local `whisper.cpp` binary path and chooses the first existing model in this order: tiny, base, then small. Tiny is preferred because it starts faster on slower laptops. Piper paths are not guessed; leave `TTS_ENGINE=mock` or configure Piper manually.
+
 ## 5. First-Run Commands
 
 From the repository root:
@@ -128,6 +150,8 @@ npm start
 
 That bootstrap flow will:
 
+- run one-time safe template identity initialization
+- create or refresh `backend/.env` local defaults when needed
 - install Node dependencies if needed
 - create `backend/.venv` if needed
 - install backend Python dependencies if needed

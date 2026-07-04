@@ -44,8 +44,9 @@ AppTemplateBase is a reusable local-first desktop application template for build
 
 From the repository root:
 
-- `npm start` bootstraps missing dependencies, then runs the full desktop app in development mode
+- `npm start` runs one-time template initialization, prepares `backend/.env`, bootstraps missing dependencies, then runs the full desktop app in development mode
 - `npm run start:bootstrap-only` performs first-run setup checks without launching the app
+- `npm run template:init` forces the template identity/default-path setup to run again
 - `npm run frontend:dev` runs the Vite renderer only
 - `npm run electron:dev` runs Electron against the Vite dev server
 - `npm run build` builds the renderer bundle used by Electron production mode
@@ -61,6 +62,35 @@ From `backend/`:
 - `pip install -e .[dev]`
 - `uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload`
 - `pytest`
+
+## First-Run Template Initialization
+
+On first `npm start`, the template initializer:
+
+- detects the current folder name
+- updates safe identity fields only if they still contain the template identity
+- writes an ignored `.app-template-state.json` marker so later starts skip identity setup
+- creates `backend/.env` from `backend/.env.example` when missing
+- writes local Whisper defaults to `backend/.env` when values are blank or still generic
+
+For this development machine, the initializer uses:
+
+- `WHISPER_CPP_BINARY=/home/llaing/whisper.cpp/build/bin/whisper-cli`
+- the first existing model in this order:
+  - `/home/llaing/whisper.cpp/models/ggml-tiny.en.bin`
+  - `/home/llaing/whisper.cpp/models/ggml-base.en.bin`
+  - `/home/llaing/whisper.cpp/models/ggml-small.en.bin`
+- `TTS_ENGINE=mock`
+
+It does not rename folders, change Git remotes, rewrite architecture docs, rename Python modules, or guess Piper paths. To rerun intentionally:
+
+```bash
+npm run template:init
+# or
+TEMPLATE_INIT_FORCE=1 npm start
+```
+
+Edit `backend/.env` manually if you want different Whisper or Piper paths.
 
 ## Local-Only Expectations
 
