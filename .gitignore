@@ -1,0 +1,83 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Node / frontend / Electron
+node_modules/
+dist/
+build/
+out/
+coverage/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.python-version
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+
+# SQLite / local databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs / temp
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+
+# Electron packaged artifacts
+release/
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+
+# Local models / generated media / AI assets
+models/
+local_models/
+artifacts/
+generated_audio/
+generated_transcripts/
+
+# Backend runtime files
+backend/.cache/
+backend/.pytest_cache/
+
+# Frontend runtime files
+frontend/node_modules/
+frontend/dist/
+
+# Electron runtime files
+electron/dist/
+electron/out/

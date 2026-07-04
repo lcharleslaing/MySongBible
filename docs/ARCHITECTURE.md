@@ -1,0 +1,33 @@
+# Architecture Summary
+
+## Purpose
+
+AppTemplateBase is a local-first desktop application template intended to serve as a reusable base for future projects.
+
+## High-Level Structure
+
+- `electron/` contains the desktop wrapper, preload bridge, and process orchestration.
+- `frontend/` contains the Vite + React + TypeScript renderer application.
+- `backend/` contains the FastAPI service, database layer, and local AI integrations.
+- `shared/` contains shared configuration and cross-layer schemas/contracts.
+- `scripts/` contains setup, development, and packaging helpers.
+- `docs/` contains architecture and project documentation.
+
+## Local-First Boundaries
+
+- Electron owns desktop lifecycle and local process management.
+- FastAPI owns app services, database access, and voice orchestration.
+- Voice logic is centralized in backend `local_ai` modules.
+- Frontend communicates through backend APIs and a minimal Electron bridge.
+
+## Planned Voice Module Direction
+
+- Speech-to-text will use configurable `whisper.cpp` paths.
+- Text-to-speech will use a pluggable engine interface.
+- No cloud STT or cloud TTS is planned.
+
+## Configuration Direction
+
+- Environment files provide defaults.
+- Runtime settings will later be persisted in SQLite.
+- Machine-specific paths must stay configurable and out of committed code.
