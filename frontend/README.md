@@ -7,8 +7,10 @@ This frontend is a Vite + React + TypeScript renderer application styled with Ta
 - routed starter UI
 - reusable shell with sidebar and topbar
 - DaisyUI theme selector
-- placeholder pages for Home, Voice Lab, Settings, and System Health
-- placeholder service files for future backend integration
+- Voice Lab workflow for local recording, file upload, STT, and TTS
+- Settings page wired to backend persistence and secure desktop pickers
+- System Health page for local diagnostics
+- typed API clients for backend settings, health, STT, and TTS endpoints
 
 ## Commands
 
@@ -16,3 +18,8 @@ This frontend is a Vite + React + TypeScript renderer application styled with Ta
 - `npm start`
 - `npm run build`
 - `npm run typecheck`
+
+## Styling Rules
+
+- DaisyUI is the primary component and theme layer.
+- Styling should stay inside Tailwind and DaisyUI utilities instead of ad hoc CSS.

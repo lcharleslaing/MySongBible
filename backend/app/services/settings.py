@@ -54,7 +54,6 @@ class SettingsService:
             audio_input_dir=audio_input_dir,
             keep_uploaded_audio_files=self.base_settings.keep_uploaded_audio_files,
             default_stt_model=self.base_settings.default_stt_model,
-            default_tts_engine=tts_engine,
             tts_engine=tts_engine,
             piper_binary=piper_binary,
             piper_model_path=piper_model_path,

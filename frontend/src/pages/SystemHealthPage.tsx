@@ -10,21 +10,21 @@ const cards = [
   },
   {
     title: "Backend API",
-    value: "Pending",
-    tone: "warning" as const,
-    detail: "API connectivity is intentionally deferred until the backend phase.",
+    value: "Ready",
+    tone: "success" as const,
+    detail: "FastAPI, SQLite settings, transcripts, STT, and TTS endpoints are available locally.",
   },
   {
     title: "Voice Services",
-    value: "Pending",
-    tone: "warning" as const,
-    detail: "Local STT and TTS engines will plug into this UI later.",
+    value: "Partial",
+    tone: "info" as const,
+    detail: "whisper.cpp STT and pluggable local TTS are wired. Voice cloning remains scaffold-only.",
   },
   {
     title: "Desktop Shell",
-    value: "Pending",
-    tone: "info" as const,
-    detail: "Electron process integration has not been wired into the frontend yet.",
+    value: "Ready",
+    tone: "success" as const,
+    detail: "Electron launches the frontend, starts the backend, and exposes a narrow preload bridge.",
   },
 ];
 
@@ -34,7 +34,7 @@ export function SystemHealthPage() {
       <PageHeader
         eyebrow="Diagnostics"
         title="System health overview"
-        description="Status cards below reflect scaffold progress only. Live backend and local engine health checks are not connected yet."
+        description="These cards summarize the current template capabilities. Detailed live status remains available on the Settings page."
       />
 
       <div className="grid gap-4 md:grid-cols-2">

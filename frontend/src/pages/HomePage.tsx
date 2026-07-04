@@ -2,9 +2,9 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { DesktopInfoCard } from "../components/desktop/DesktopInfoCard";
 
 const quickStartItems = [
-  "Desktop shell reserved for Electron integration",
-  "Frontend scaffolded with DaisyUI-based navigation and pages",
-  "Backend/API hooks intentionally left as placeholders for now",
+  "Electron, React, and FastAPI are already wired into a single local desktop workflow.",
+  "DaisyUI provides the base component system for navigation, forms, and status surfaces.",
+  "Local speech modules stay centralized in the backend so future apps can extend them cleanly.",
 ];
 
 export function HomePage() {

@@ -1,8 +1,3 @@
-export type ApiResult<T> = {
-  data: T | null;
-  error: string | null;
-};
-
 export class ApiError extends Error {
   status: number;
   details: unknown;
@@ -45,11 +40,4 @@ export async function parseJsonResponse<T>(response: Response): Promise<T> {
   }
 
   return response.json() as Promise<T>;
-}
-
-export async function placeholderRequest<T>(data: T): Promise<ApiResult<T>> {
-  return Promise.resolve({
-    data,
-    error: null,
-  });
 }

@@ -55,6 +55,16 @@ tmp/
 temp/
 *.tmp
 
+# Local app runtime data
+data/
+backend/data/
+*.wav
+*.mp3
+*.ogg
+*.webm
+*.flac
+*.m4a
+
 # Electron packaged artifacts
 release/
 *.dmg

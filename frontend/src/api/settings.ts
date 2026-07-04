@@ -12,7 +12,6 @@ export type SettingsRecord = {
   audio_input_dir: string;
   keep_uploaded_audio_files: boolean;
   default_stt_model: string | null;
-  default_tts_engine: string;
   tts_engine: string;
   piper_binary: string | null;
   piper_model_path: string | null;

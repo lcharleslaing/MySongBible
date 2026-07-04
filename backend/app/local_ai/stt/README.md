@@ -1,5 +1,9 @@
 # Speech-to-Text
 
-This folder is reserved for local speech-to-text adapters and helpers.
+This folder contains local speech-to-text adapters and helpers.
 
-The first planned adapter is `whisper.cpp`, configured through environment and app settings rather than hardcoded paths.
+Current direction:
+
+- keep `whisper.cpp` invocation centralized here
+- configure binary and model paths through environment variables or saved settings
+- keep route handlers free of subprocess details

@@ -9,10 +9,24 @@ This directory contains the desktop wrapper for AppTemplateBase.
 - development loading from the Vite dev server
 - production loading from the built frontend
 - simple backend child-process management
-- placeholder desktop IPC methods
+- native file and directory pickers for local settings
+- narrow IPC methods for desktop status and utility actions
 
 ## IPC Methods
 
 - `desktop.getAppVersion()`
 - `desktop.checkBackendHealth()`
 - `desktop.openLogsFolder()`
+- `desktop.pickWhisperBinary()`
+- `desktop.pickWhisperModel()`
+- `desktop.pickPiperBinary()`
+- `desktop.pickPiperModel()`
+- `desktop.pickAudioInputDirectory()`
+- `desktop.pickAudioOutputDirectory()`
+- `desktop.pickSqliteDatabase()`
+
+## Security Notes
+
+- `contextIsolation` stays enabled.
+- `nodeIntegration` stays disabled in the renderer.
+- Filesystem access flows through preload and the Electron main process only.

@@ -24,10 +24,12 @@ AppTemplateBase is a local-first desktop application template intended to serve 
 
 - Speech-to-text will use configurable `whisper.cpp` paths.
 - Text-to-speech will use a pluggable engine interface.
+- Voice cloning stays as backend scaffolding until heavier local engines are intentionally added.
 - No cloud STT or cloud TTS is planned.
 
 ## Configuration Direction
 
 - Environment files provide defaults.
-- Runtime settings will later be persisted in SQLite.
+- Runtime settings are persisted in SQLite through the `AppSetting` table.
 - Machine-specific paths must stay configurable and out of committed code.
+- Electron owns native file and directory pickers so the renderer does not receive raw filesystem access.

@@ -2,4 +2,10 @@
 
 This directory contains project-level documentation for AppTemplateBase.
 
-Current contents focus on structure and architecture only. Implementation notes, setup guides, and workflow documentation can be added in later phases.
+Current docs cover:
+
+- architecture and layer boundaries
+- local Whisper and local TTS setup
+- settings resolution rules
+- development and troubleshooting workflows
+- future voice cloning direction
