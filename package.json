@@ -5,8 +5,10 @@
   "main": "electron/main/index.cjs",
   "workspaces": ["frontend"],
   "scripts": {
-    "start": "npm run dev",
-    "dev": "concurrently -k \"npm:frontend:dev\" \"npm:electron:dev\"",
+    "start": "node scripts/dev/bootstrap-start.cjs",
+    "start:bootstrap-only": "node scripts/dev/bootstrap-start.cjs --bootstrap-only",
+    "dev": "npm run app:dev",
+    "app:dev": "concurrently -k \"npm:frontend:dev\" \"npm:electron:dev\"",
     "frontend:dev": "npm --prefix frontend start",
     "electron:dev": "wait-on tcp:127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .",
     "electron:smoke": "npm run build:frontend && cross-env APP_TEMPLATE_SMOKE=1 APP_TEMPLATE_RENDERER_MODE=dist electron .",

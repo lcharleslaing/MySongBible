@@ -35,7 +35,8 @@ This repository currently contains the initial project structure only. Runtime i
 
 From the repository root:
 
-- `npm start` runs the desktop app in development mode
+- `npm start` bootstraps missing dependencies, then runs the desktop app in development mode
+- `npm run start:bootstrap-only` performs first-run setup checks without launching the app
 - `npm run frontend:dev` runs the Vite renderer only
 - `npm run electron:dev` runs Electron against the Vite dev server
 - `npm run build` builds the frontend
