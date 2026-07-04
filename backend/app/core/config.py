@@ -28,7 +28,13 @@ class Settings(BaseSettings):
     whisper_thread_count: int = 4
     keep_uploaded_audio_files: bool = True
     default_stt_model: str | None = None
-    default_tts_engine: str = "placeholder"
+    tts_engine: str = Field(
+        default="mock",
+        validation_alias=AliasChoices("TTS_ENGINE", "DEFAULT_TTS_ENGINE"),
+    )
+    piper_binary: Path | None = None
+    piper_model_path: Path | None = None
+    tts_output_dir: Path | None = None
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
@@ -38,14 +44,29 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    @field_validator("whisper_cpp_binary", "whisper_model_path", "default_stt_model", mode="before")
+    @field_validator(
+        "whisper_cpp_binary",
+        "whisper_model_path",
+        "piper_binary",
+        "piper_model_path",
+        "default_stt_model",
+        mode="before",
+    )
     @classmethod
     def empty_string_to_none(cls, value: object) -> object:
         if isinstance(value, str) and value.strip() == "":
             return None
         return value
 
-    @field_validator("app_data_dir", "whisper_cpp_binary", "whisper_model_path", mode="before")
+    @field_validator(
+        "app_data_dir",
+        "whisper_cpp_binary",
+        "whisper_model_path",
+        "piper_binary",
+        "piper_model_path",
+        "tts_output_dir",
+        mode="before",
+    )
     @classmethod
     def normalize_paths(cls, value: object) -> object:
         if isinstance(value, str):
@@ -55,6 +76,10 @@ class Settings(BaseSettings):
     @property
     def audio_input_dir(self) -> Path:
         return self.app_data_dir / "audio" / "input"
+
+    @property
+    def audio_tts_dir(self) -> Path:
+        return self.tts_output_dir or (self.app_data_dir / "audio" / "tts")
 
 
 @lru_cache(maxsize=1)

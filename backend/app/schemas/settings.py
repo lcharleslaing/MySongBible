@@ -13,6 +13,10 @@ class PublicSettingsResponse(BaseModel):
     keep_uploaded_audio_files: bool
     default_stt_model: str | None
     default_tts_engine: str
+    tts_engine: str
+    piper_binary: str | None = None
+    piper_model_path: str | None = None
+    tts_output_dir: str | None = None
 
 
 class SettingsUpdateRequest(BaseModel):

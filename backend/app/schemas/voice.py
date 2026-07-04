@@ -7,4 +7,6 @@ class VoiceStatusResponse(BaseModel):
     tts_engine: str
     whisper_cpp_binary: str | None
     whisper_model_path: str | None
+    piper_binary: str | None = None
+    piper_model_path: str | None = None
     message: str

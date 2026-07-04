@@ -29,7 +29,16 @@ class SettingsService:
             "whisper_model_path",
             str(self.base_settings.whisper_model_path) if self.base_settings.whisper_model_path else None,
         )
-        default_tts_engine = overrides.get("default_tts_engine", self.base_settings.default_tts_engine)
+        tts_engine = overrides.get("tts_engine", overrides.get("default_tts_engine", self.base_settings.tts_engine))
+        piper_binary = overrides.get(
+            "piper_binary",
+            str(self.base_settings.piper_binary) if self.base_settings.piper_binary else None,
+        )
+        piper_model_path = overrides.get(
+            "piper_model_path",
+            str(self.base_settings.piper_model_path) if self.base_settings.piper_model_path else None,
+        )
+        tts_output_dir = overrides.get("tts_output_dir", str(self.base_settings.audio_tts_dir))
 
         return PublicSettingsResponse(
             app_name=self.base_settings.app_name,
@@ -42,7 +51,11 @@ class SettingsService:
             whisper_thread_count=self.base_settings.whisper_thread_count,
             keep_uploaded_audio_files=self.base_settings.keep_uploaded_audio_files,
             default_stt_model=self.base_settings.default_stt_model,
-            default_tts_engine=default_tts_engine,
+            default_tts_engine=tts_engine,
+            tts_engine=tts_engine,
+            piper_binary=piper_binary,
+            piper_model_path=piper_model_path,
+            tts_output_dir=tts_output_dir,
         )
 
     def update_settings(self, payload: SettingsUpdateRequest) -> PublicSettingsResponse:
@@ -66,7 +79,10 @@ class SettingsService:
                 "database_url": public_settings.database_url,
                 "whisper_cpp_binary": Path(public_settings.whisper_cpp_binary) if public_settings.whisper_cpp_binary else None,
                 "whisper_model_path": Path(public_settings.whisper_model_path) if public_settings.whisper_model_path else None,
-                "default_tts_engine": public_settings.default_tts_engine,
+                "tts_engine": public_settings.tts_engine,
+                "piper_binary": Path(public_settings.piper_binary) if public_settings.piper_binary else None,
+                "piper_model_path": Path(public_settings.piper_model_path) if public_settings.piper_model_path else None,
+                "tts_output_dir": Path(public_settings.tts_output_dir) if public_settings.tts_output_dir else self.base_settings.audio_tts_dir,
             }
         )
 
