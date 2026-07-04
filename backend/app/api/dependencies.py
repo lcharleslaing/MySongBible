@@ -6,6 +6,7 @@ from sqlmodel import Session
 from app.core.config import Settings, get_settings
 from app.db.session import engine
 from app.local_ai.stt.whisper_cpp import WhisperCppTranscriber
+from app.services.settings import SettingsService
 
 
 def get_session() -> Generator[Session, None, None]:
@@ -17,7 +18,14 @@ def get_app_settings() -> Settings:
     return get_settings()
 
 
-def get_whisper_cpp_transcriber(
+def get_settings_service(
+    session: Session = Depends(get_session),
     settings: Settings = Depends(get_app_settings),
+) -> SettingsService:
+    return SettingsService(session, settings)
+
+
+def get_whisper_cpp_transcriber(
+    settings_service: SettingsService = Depends(get_settings_service),
 ) -> WhisperCppTranscriber:
-    return WhisperCppTranscriber(settings)
+    return WhisperCppTranscriber(settings_service.get_runtime_settings())

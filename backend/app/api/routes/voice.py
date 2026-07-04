@@ -1,14 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.core.config import get_settings
 from app.schemas.voice import VoiceStatusResponse
+from app.services.settings import SettingsService
+from app.api.dependencies import get_settings_service
 
 router = APIRouter(tags=["voice"])
 
 
 @router.get("/voice/status", response_model=VoiceStatusResponse)
-def get_voice_status() -> VoiceStatusResponse:
-    settings = get_settings()
+def get_voice_status(settings_service: SettingsService = Depends(get_settings_service)) -> VoiceStatusResponse:
+    settings = settings_service.get_runtime_settings()
     return VoiceStatusResponse(
         status="placeholder",
         stt_engine="whisper.cpp (not configured)",
