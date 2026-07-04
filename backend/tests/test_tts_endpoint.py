@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_tts_engine_manager
+from app.api.dependencies import get_settings_service, get_tts_engine_manager
 from app.core.config import Settings
 from app.local_ai.tts.base import BaseTtsEngine, TtsEngineCapabilities, TtsSynthesisInput, TtsSynthesisResult
 from app.local_ai.tts.manager import TtsEngineManager
+from app.services.settings import SettingsService
 
 
 class FakeTtsEngine(BaseTtsEngine):
@@ -33,12 +33,22 @@ class FakeTtsManager(TtsEngineManager):
         return FakeTtsEngine()
 
 
-def test_tts_synthesize_creates_job_and_returns_audio_path(client: TestClient, tmp_path: Path) -> None:
-    def override_tts_manager() -> TtsEngineManager:
-        settings = Settings(tts_output_dir=tmp_path / "tts-output")
+def test_tts_synthesize_creates_job_and_returns_audio_path(client, tmp_path: Path) -> None:
+    tts_output_dir = tmp_path / "tts-output"
+
+    async def override_tts_manager() -> TtsEngineManager:
+        settings = Settings(tts_output_dir=tts_output_dir)
         return FakeTtsManager(settings)
 
+    class FakeSettingsService:
+        def get_runtime_settings(self) -> Settings:
+            return Settings(tts_output_dir=tts_output_dir)
+
+    async def override_settings_service() -> SettingsService:
+        return FakeSettingsService()  # type: ignore[return-value]
+
     client.app.dependency_overrides[get_tts_engine_manager] = override_tts_manager
+    client.app.dependency_overrides[get_settings_service] = override_settings_service
 
     response = client.post(
         "/api/tts/synthesize",
@@ -48,16 +58,22 @@ def test_tts_synthesize_creates_job_and_returns_audio_path(client: TestClient, t
         },
     )
 
-    client.app.dependency_overrides.pop(get_tts_engine_manager, None)
-
     assert response.status_code == 201
     payload = response.json()
     assert payload["engine_used"] == "mock"
     assert payload["status"] == "completed"
     assert payload["audio_file_path"].endswith(".wav")
+    assert payload["audio_file_url"].startswith("/api/audio/tts/")
+
+    audio_response = client.get(payload["audio_file_url"])
+    client.app.dependency_overrides.pop(get_tts_engine_manager, None)
+    client.app.dependency_overrides.pop(get_settings_service, None)
+
+    assert audio_response.status_code == 200
+    assert audio_response.content == b"fake wav bytes"
 
 
-def test_tts_synthesize_requires_existing_voice_profile(client: TestClient) -> None:
+def test_tts_synthesize_requires_existing_voice_profile(client) -> None:
     response = client.post(
         "/api/tts/synthesize",
         json={

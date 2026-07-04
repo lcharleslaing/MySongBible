@@ -32,12 +32,12 @@ AppTemplateBase is a reusable local-first desktop application template for build
 
 ## Current Capabilities
 
-- Electron launches the desktop shell in development and production modes.
+- Electron launches the desktop shell in development mode. Production packaging is not fully configured yet.
 - React, Tailwind, and DaisyUI provide the renderer UI.
 - FastAPI runs locally behind Electron with SQLite-backed persistence.
 - `whisper.cpp` speech-to-text is supported through configurable binary and model paths.
 - Local TTS is centralized behind a pluggable engine layer with `mock` and Piper support.
-- Editable machine-local settings are stored in SQLite and override `.env` defaults.
+- Editable machine-local settings are stored in SQLite and override backend environment defaults, except `DATABASE_URL`, which is startup-only.
 - Voice cloning remains scaffold-only and does not download models or add heavy runtimes yet.
 
 ## Current Commands
@@ -50,7 +50,7 @@ From the repository root:
 - `npm run electron:dev` runs Electron against the Vite dev server
 - `npm run build` builds the renderer bundle used by Electron production mode
 - `npm run typecheck` runs the frontend TypeScript check
-- `npm run electron:smoke` launches Electron against the built frontend for a lightweight smoke test
+- `npm run electron:smoke` launches Electron against the built frontend and waits for backend health
 
 ## Backend Commands
 

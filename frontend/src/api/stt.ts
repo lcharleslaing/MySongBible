@@ -31,7 +31,7 @@ export async function transcribeAudioRecording(input: {
     formData.append("language", input.language);
   }
 
-  const response = await fetch(buildApiUrl("/api/stt/transcribe"), {
+  const response = await fetch(await buildApiUrl("/api/stt/transcribe"), {
     method: "POST",
     body: formData,
   });

@@ -16,7 +16,7 @@ Use this checklist when turning the template into a new project or validating a 
 ## Electron
 
 - [ ] Electron launches against the Vite dev server in development
-- [ ] `npm run electron:smoke` exits successfully against the built frontend
+- [ ] `npm run electron:smoke` exits successfully against the built frontend after backend health is reachable
 
 ## SQLite
 

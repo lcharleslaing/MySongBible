@@ -11,6 +11,13 @@ from app.schemas.transcripts import TranscriptCreate
 from app.services.transcripts import TranscriptService
 
 
+class SttUploadError(ValueError):
+    def __init__(self, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
 class SttService:
     def __init__(
         self,
@@ -52,14 +59,43 @@ class SttService:
         return transcript
 
     def _save_upload(self, upload_file: UploadFile) -> Path:
+        self._validate_upload_metadata(upload_file)
         audio_input_dir = self.settings.audio_input_dir
         audio_input_dir.mkdir(parents=True, exist_ok=True)
 
         safe_name = Path(upload_file.filename or "upload.wav").name
         destination_path = audio_input_dir / f"{uuid4().hex}_{safe_name}"
 
+        total_bytes = 0
         with destination_path.open("wb") as output_file:
-            shutil.copyfileobj(upload_file.file, output_file)
+            while chunk := upload_file.file.read(1024 * 1024):
+                total_bytes += len(chunk)
+                if total_bytes > self.settings.max_upload_size_bytes:
+                    output_file.close()
+                    destination_path.unlink(missing_ok=True)
+                    raise SttUploadError(
+                        f"Audio upload exceeds the {self.settings.max_upload_size_bytes} byte limit.",
+                        status_code=413,
+                    )
+                output_file.write(chunk)
 
         upload_file.file.close()
         return destination_path
+
+    def _validate_upload_metadata(self, upload_file: UploadFile) -> None:
+        filename = upload_file.filename or ""
+        extension = Path(filename).suffix.lower().lstrip(".")
+        allowed_extensions = {item.lower().lstrip(".") for item in self.settings.allowed_audio_extensions}
+        if extension not in allowed_extensions:
+            raise SttUploadError(
+                f"Unsupported audio file extension '.{extension or 'unknown'}'. Allowed extensions: {', '.join(sorted(allowed_extensions))}.",
+                status_code=400,
+            )
+
+        content_type = (upload_file.content_type or "").split(";")[0].strip().lower()
+        allowed_mime_types = {item.lower() for item in self.settings.allowed_audio_mime_types}
+        if content_type and content_type not in allowed_mime_types:
+            raise SttUploadError(
+                f"Unsupported audio MIME type '{content_type}'. Allowed MIME types: {', '.join(sorted(allowed_mime_types))}.",
+                status_code=400,
+            )

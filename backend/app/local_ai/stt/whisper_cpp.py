@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from subprocess import CompletedProcess, run
+from subprocess import CompletedProcess, TimeoutExpired, run
 import tempfile
 
 from app.core.config import Settings
@@ -68,12 +68,21 @@ class WhisperCppTranscriber:
             if language:
                 command.extend(["--language", language])
 
-            completed = run(
-                command,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            try:
+                completed = run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=self.settings.whisper_timeout_seconds,
+                )
+            except TimeoutExpired as error:
+                raise WhisperCppError(
+                    f"whisper-cli timed out after {self.settings.whisper_timeout_seconds} seconds.",
+                    status_code=504,
+                    stdout=error.stdout.decode("utf-8", errors="replace") if isinstance(error.stdout, bytes) else error.stdout,
+                    stderr=error.stderr.decode("utf-8", errors="replace") if isinstance(error.stderr, bytes) else error.stderr,
+                ) from error
             transcript_text = self._extract_transcript_text(completed, output_prefix)
 
             if completed.returncode != 0:

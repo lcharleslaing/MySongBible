@@ -74,14 +74,15 @@ release/
 *.rpm
 
 # Local models / generated media / AI assets
-models/
-local_models/
-artifacts/
-generated_audio/
-generated_transcripts/
-recordings/
-transcripts/
-voice_samples/
+/models/
+/local_models/
+/ai_models/
+/artifacts/
+/generated_audio/
+/generated_transcripts/
+/recordings/
+/transcripts/
+/voice_samples/
 *.gguf
 *.onnx
 *.bin
@@ -97,6 +98,10 @@ backend/.pytest_cache/
 # Frontend runtime files
 frontend/node_modules/
 frontend/dist/
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/tailwind.config.js
+frontend/tailwind.config.d.ts
 
 # Electron runtime files
 electron/dist/

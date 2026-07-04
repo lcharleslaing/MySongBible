@@ -67,7 +67,7 @@ class TtsService:
         return TtsSynthesisResponse(
             job_id=job.id or 0,
             audio_file_path=str(result.audio_file_path),
-            audio_file_url=None,
+            audio_file_url=f"/api/audio/tts/{result.audio_file_path.name}",
             engine_used=result.engine_used,
             status=result.status,
         )

@@ -16,6 +16,8 @@ export type SettingsRecord = {
   piper_binary: string | null;
   piper_model_path: string | null;
   tts_output_dir: string | null;
+  database_path_editable: boolean;
+  database_path_note: string;
 };
 
 export type SettingsUpdatePayload = {
@@ -31,12 +33,12 @@ export type SettingsUpdatePayload = {
 };
 
 export async function getSettings() {
-  const response = await fetch(buildApiUrl("/api/settings"));
+  const response = await fetch(await buildApiUrl("/api/settings"));
   return parseJsonResponse<SettingsRecord>(response);
 }
 
 export async function updateSettings(payload: SettingsUpdatePayload) {
-  const response = await fetch(buildApiUrl("/api/settings"), {
+  const response = await fetch(await buildApiUrl("/api/settings"), {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",

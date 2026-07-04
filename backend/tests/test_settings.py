@@ -1,7 +1,6 @@
-from fastapi.testclient import TestClient
 
 
-def test_settings_endpoint(client: TestClient) -> None:
+def test_settings_endpoint(client) -> None:
     response = client.get("/api/settings")
     assert response.status_code == 200
 

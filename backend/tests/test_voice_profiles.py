@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 
 
-def test_list_voice_engines_returns_placeholder_engines(client: TestClient) -> None:
+def test_list_voice_engines_returns_placeholder_engines(client) -> None:
     response = client.get("/api/voice-engines")
     assert response.status_code == 200
     payload = response.json()
@@ -12,7 +11,7 @@ def test_list_voice_engines_returns_placeholder_engines(client: TestClient) -> N
     assert all(item["supported"] is False for item in payload["items"])
 
 
-def test_create_and_list_voice_profiles(client: TestClient, tmp_path: Path) -> None:
+def test_create_and_list_voice_profiles(client, tmp_path: Path) -> None:
     reference_audio = tmp_path / "reference.wav"
     reference_audio.write_bytes(b"wav")
 
@@ -40,7 +39,7 @@ def test_create_and_list_voice_profiles(client: TestClient, tmp_path: Path) -> N
     assert payload["items"][0]["name"] == "Narrator"
 
 
-def test_create_voice_profile_validates_reference_audio(client: TestClient) -> None:
+def test_create_voice_profile_validates_reference_audio(client) -> None:
     response = client.post(
         "/api/voice-profiles",
         json={

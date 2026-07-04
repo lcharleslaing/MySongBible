@@ -16,11 +16,11 @@ export type VoiceStatusRecord = {
 };
 
 export async function getBackendHealth() {
-  const response = await fetch(buildApiUrl("/api/health"));
+  const response = await fetch(await buildApiUrl("/api/health"));
   return parseJsonResponse<BackendHealthRecord>(response);
 }
 
 export async function getVoiceStatus() {
-  const response = await fetch(buildApiUrl("/api/voice/status"));
+  const response = await fetch(await buildApiUrl("/api/voice/status"));
   return parseJsonResponse<VoiceStatusRecord>(response);
 }

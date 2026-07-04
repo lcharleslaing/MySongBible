@@ -9,6 +9,7 @@ TTS_ENGINE=mock
 PIPER_BINARY=/absolute/path/to/piper
 PIPER_MODEL_PATH=/absolute/path/to/piper-model.onnx
 TTS_OUTPUT_DIR=./data/audio/tts
+TTS_TIMEOUT_SECONDS=120
 ```
 
 ## Engines
@@ -24,11 +25,13 @@ TTS_OUTPUT_DIR=./data/audio/tts
 
 - used when `TTS_ENGINE=piper` and both `PIPER_BINARY` and `PIPER_MODEL_PATH` are configured
 - invokes Piper through a safe subprocess call
+- fails clearly if `TTS_ENGINE=piper` but Piper is not configured or available
 - writes synthesized WAV output to the configured output directory
 
 ## Output Storage
 
 - synthesized audio is saved under `data/audio/tts` by default
+- synthesized audio is served back to the renderer through `/api/audio/tts/{filename}`
 - TTS jobs are stored in SQLite
 - large audio data is stored on disk, not in the database
 

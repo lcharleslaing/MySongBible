@@ -106,6 +106,7 @@ export function SettingsPage() {
   const [backendHealth, setBackendHealth] = useState<string>("loading");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatusRecord | null>(null);
   const [statusError, setStatusError] = useState("");
+  const [databasePathNote, setDatabasePathNote] = useState("SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database.");
 
   const formErrors = useMemo(() => validateForm(formState), [formState]);
   const hasValidationErrors = Object.keys(formErrors).length > 0;
@@ -129,6 +130,7 @@ export function SettingsPage() {
         const nextFormState = buildFormState(settings);
         setFormState(nextFormState);
         setSavedState(nextFormState);
+        setDatabasePathNote(settings.database_path_note);
         setBackendHealth(health.status);
         setVoiceStatus(voice);
         setStatusMessage("Loaded local settings. Environment values remain the defaults until you override them here.");
@@ -230,13 +232,6 @@ export function SettingsPage() {
     const result = await window.desktop?.pickAudioOutputDirectory();
     if (result && !result.canceled && result.path) {
       setField("audioOutputDirectory", result.path);
-    }
-  };
-
-  const pickSqliteDatabase = async () => {
-    const result = await window.desktop?.pickSqliteDatabase();
-    if (result && !result.canceled && result.path) {
-      setField("sqliteDatabasePath", result.path);
     }
   };
 
@@ -406,20 +401,18 @@ export function SettingsPage() {
               </label>
 
               <label className="form-control gap-2 lg:col-span-2">
-                <span className="label-text font-medium">SQLite Database Path</span>
-                <div className="join">
+                <span className="label-text font-medium">SQLite Database Path (startup-only)</span>
+                <div>
                   <input
                     type="text"
-                    className={`input input-bordered join-item w-full ${formErrors.sqliteDatabasePath ? "input-error" : ""}`}
+                    className={`input input-bordered w-full ${formErrors.sqliteDatabasePath ? "input-error" : ""}`}
                     value={formState.sqliteDatabasePath}
-                    onChange={(event) => setField("sqliteDatabasePath", event.target.value)}
-                    disabled={isLoading || isSaving}
+                    readOnly
+                    disabled={isLoading}
                   />
-                  <button type="button" className="btn btn-outline join-item" onClick={pickSqliteDatabase} disabled={isLoading || isSaving}>
-                    Browse
-                  </button>
                 </div>
                 {formErrors.sqliteDatabasePath ? <span className="label-text-alt text-error">{formErrors.sqliteDatabasePath}</span> : null}
+                <span className="label-text-alt text-base-content/60">{databasePathNote}</span>
               </label>
             </div>
 

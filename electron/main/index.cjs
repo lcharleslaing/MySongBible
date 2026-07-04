@@ -9,6 +9,10 @@ const rendererUrl = process.env.ELECTRON_RENDERER_URL || "http://127.0.0.1:5173"
 const useLocalDist = process.env.APP_TEMPLATE_RENDERER_MODE === "dist";
 const smokeMode = process.env.APP_TEMPLATE_SMOKE === "1";
 
+if (smokeMode || process.env.APP_TEMPLATE_DISABLE_CHROMIUM_SANDBOX === "1") {
+  app.commandLine.appendSwitch("no-sandbox");
+}
+
 let mainWindow = null;
 let backendController = null;
 
@@ -41,8 +45,18 @@ function createMainWindow() {
     window.show();
   });
 
-  window.webContents.on("did-finish-load", () => {
+  window.webContents.on("did-finish-load", async () => {
     if (smokeMode) {
+      if (backendController?.healthUrl) {
+        const deadline = Date.now() + 10000;
+        while (Date.now() < deadline) {
+          const result = await fetch(backendController.healthUrl).then((response) => response.ok).catch(() => false);
+          if (result) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
       setTimeout(() => {
         app.quit();
       }, 750);

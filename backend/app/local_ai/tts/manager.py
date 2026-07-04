@@ -11,17 +11,19 @@ class TtsEngineManager:
     def resolve_engine(self, requested_engine: str | None = None) -> BaseTtsEngine:
         engine_name = (requested_engine or self.settings.tts_engine).strip().lower()
 
+        if engine_name == "mock":
+            return MockTtsEngine()
+
         if engine_name == "piper":
             piper = PiperEngine(self.settings)
             if piper.is_available():
                 return piper
-            if requested_engine:
-                raise TtsEngineError(
-                    "Piper was requested but is not configured or available on this machine.",
-                    status_code=400,
-                )
+            raise TtsEngineError(
+                "Piper is configured but is not available on this machine. Check PIPER_BINARY and PIPER_MODEL_PATH.",
+                status_code=400,
+            )
 
-        if engine_name in {"mock", "placeholder", ""} or not requested_engine:
+        if engine_name in {"placeholder", ""}:
             return MockTtsEngine()
 
         raise TtsEngineError(f"Unsupported TTS engine '{engine_name}'.", status_code=400)

@@ -95,12 +95,12 @@ npm run electron:smoke
 ```bash
 cd backend
 source .venv/bin/activate
-pytest
+python -m pytest -vv
 ```
 
 ## Local Configuration
 
-Environment files provide defaults. Saved local settings in SQLite can override them later.
+Backend environment defaults should go in `backend/.env` copied from `backend/.env.example`. Saved local settings in SQLite can override editable voice/audio values later.
 
 Useful variables:
 
@@ -115,6 +115,10 @@ PIPER_BINARY=/absolute/path/to/piper
 PIPER_MODEL_PATH=/absolute/path/to/piper-model.onnx
 TTS_OUTPUT_DIR=./data/audio/tts
 ```
+
+`DATABASE_URL` is startup-only. The Settings page displays the active SQLite path read-only; change `DATABASE_URL` in `backend/.env` and restart the backend to use another database.
+
+Production packaging is not fully configured yet. Development mode and the smoke test are supported, but a distributable build still needs an explicit strategy for bundling the backend, Python runtime, and backend dependencies.
 
 See:
 

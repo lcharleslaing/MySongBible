@@ -30,13 +30,17 @@ function startBackendProcess({ app, isDev }) {
 
   const { backendDir, venvPython } = resolveBackendPaths(isDev);
   if (!fs.existsSync(backendDir)) {
-    console.warn("Backend directory not found, skipping backend startup:", backendDir);
+    const message = isDev
+      ? `Backend directory not found, skipping backend startup: ${backendDir}`
+      : `Packaged backend resources were not found at ${backendDir}. Production packaging is not fully configured yet; run the app in development mode or add backend resources to the packaged app.`;
+    console.warn(message);
     return null;
   }
 
   const pythonBinary = fs.existsSync(venvPython) ? venvPython : "python3";
   const host = process.env.ELECTRON_BACKEND_HOST || "127.0.0.1";
   const port = process.env.ELECTRON_BACKEND_PORT || "8000";
+  const baseUrl = process.env.ELECTRON_BACKEND_BASE_URL || `http://${host}:${port}`;
   const env = {
     ...process.env,
     BACKEND_HOST: process.env.BACKEND_HOST || host,
@@ -68,7 +72,8 @@ function startBackendProcess({ app, isDev }) {
 
   return {
     child,
-    healthUrl: process.env.ELECTRON_BACKEND_HEALTH_URL || `http://${host}:${port}/api/health`,
+    baseUrl,
+    healthUrl: process.env.ELECTRON_BACKEND_HEALTH_URL || `${baseUrl}/api/health`,
     logsDir: app.getPath("logs"),
   };
 }

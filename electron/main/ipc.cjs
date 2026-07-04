@@ -40,6 +40,7 @@ function normalizeSelectedPath(filePaths) {
 
 function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backendController }) {
   ipcMain.handle("desktop:get-app-version", () => app.getVersion());
+  ipcMain.handle("desktop:get-backend-base-url", () => backendController?.baseUrl || "http://127.0.0.1:8000");
 
   ipcMain.handle("desktop:check-backend-health", async () => {
     const healthUrl = backendController?.healthUrl || "http://127.0.0.1:8000/api/health";
@@ -138,21 +139,6 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
     };
   });
 
-  ipcMain.handle("desktop:pick-sqlite-database", async () => {
-    const result = await dialog.showSaveDialog(getActiveWindow(BrowserWindow), {
-      title: "Select SQLite Database Path",
-      defaultPath: "app_template_base.sqlite3",
-      filters: [
-        { name: "SQLite Databases", extensions: ["sqlite3", "sqlite", "db"] },
-        { name: "All Files", extensions: ["*"] },
-      ],
-    });
-
-    return {
-      canceled: result.canceled,
-      path: result.canceled ? null : result.filePath || null,
-    };
-  });
 }
 
 module.exports = {

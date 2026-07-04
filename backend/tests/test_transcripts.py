@@ -1,13 +1,12 @@
-from fastapi.testclient import TestClient
 
 
-def test_list_transcripts_defaults_empty(client: TestClient) -> None:
+def test_list_transcripts_defaults_empty(client) -> None:
     response = client.get("/api/transcripts")
     assert response.status_code == 200
     assert response.json() == {"items": []}
 
 
-def test_create_and_list_transcripts(client: TestClient) -> None:
+def test_create_and_list_transcripts(client) -> None:
     create_response = client.post(
         "/api/transcripts",
         json={

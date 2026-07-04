@@ -11,7 +11,7 @@ router = APIRouter(tags=["tts"])
 
 
 @router.post("/tts/synthesize", response_model=TtsSynthesisResponse, status_code=status.HTTP_201_CREATED)
-def synthesize_speech(
+async def synthesize_speech(
     payload: TtsSynthesisRequest,
     session: Session = Depends(get_session),
     manager: TtsEngineManager = Depends(get_tts_engine_manager),

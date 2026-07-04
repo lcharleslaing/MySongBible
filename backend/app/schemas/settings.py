@@ -17,6 +17,8 @@ class PublicSettingsResponse(BaseModel):
     piper_binary: str | None = None
     piper_model_path: str | None = None
     tts_output_dir: str | None = None
+    database_path_editable: bool = False
+    database_path_note: str = "SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database."
 
 
 class SettingsUpdateRequest(BaseModel):

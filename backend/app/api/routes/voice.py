@@ -8,7 +8,7 @@ router = APIRouter(tags=["voice"])
 
 
 @router.get("/voice/status", response_model=VoiceStatusResponse)
-def get_voice_status(settings_service: SettingsService = Depends(get_settings_service)) -> VoiceStatusResponse:
+async def get_voice_status(settings_service: SettingsService = Depends(get_settings_service)) -> VoiceStatusResponse:
     settings = settings_service.get_runtime_settings()
     whisper_ready = bool(settings.whisper_cpp_binary and settings.whisper_model_path)
     piper_ready = bool(settings.piper_binary and settings.piper_model_path)

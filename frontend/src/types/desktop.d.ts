@@ -4,6 +4,7 @@ declare global {
   interface Window {
     desktop: {
       getAppVersion: () => Promise<string>;
+      getBackendBaseUrl: () => Promise<string>;
       checkBackendHealth: () => Promise<{
         ok: boolean;
         status: number | null;
@@ -36,10 +37,6 @@ declare global {
         path: string | null;
       }>;
       pickAudioOutputDirectory: () => Promise<{
-        canceled: boolean;
-        path: string | null;
-      }>;
-      pickSqliteDatabase: () => Promise<{
         canceled: boolean;
         path: string | null;
       }>;

@@ -8,6 +8,10 @@ from app.models.app_setting import AppSetting
 from app.schemas.settings import PublicSettingsResponse, SettingsUpdateRequest
 
 
+class StartupOnlySettingError(ValueError):
+    pass
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -20,7 +24,7 @@ class SettingsService:
     def get_public_settings(self) -> PublicSettingsResponse:
         overrides = self._get_overrides()
 
-        database_url = overrides.get("database_url", self.base_settings.database_url)
+        database_url = self.base_settings.database_url
         whisper_cpp_binary = overrides.get(
             "whisper_cpp_binary",
             str(self.base_settings.whisper_cpp_binary) if self.base_settings.whisper_cpp_binary else None,
@@ -61,6 +65,12 @@ class SettingsService:
         )
 
     def update_settings(self, payload: SettingsUpdateRequest) -> PublicSettingsResponse:
+        requested_database_url = self._sqlite_url_from_path(payload.sqlite_database_path)
+        if requested_database_url != self.base_settings.database_url:
+            raise StartupOnlySettingError(
+                "SQLite database path is startup-only. Update DATABASE_URL in the backend environment and restart the backend.",
+            )
+
         updates = {
             "whisper_cpp_binary": payload.whisper_cpp_binary or "",
             "whisper_model_path": payload.whisper_model_path or "",
@@ -71,7 +81,6 @@ class SettingsService:
             "piper_model_path": payload.piper_model_path or "",
             "audio_input_dir": payload.audio_input_dir,
             "tts_output_dir": payload.tts_output_dir,
-            "database_url": self._sqlite_url_from_path(payload.sqlite_database_path),
         }
 
         for key, value in updates.items():

@@ -9,13 +9,13 @@ router = APIRouter(tags=["transcripts"])
 
 
 @router.get("/transcripts", response_model=TranscriptListResponse)
-def list_transcripts(session: Session = Depends(get_session)) -> TranscriptListResponse:
+async def list_transcripts(session: Session = Depends(get_session)) -> TranscriptListResponse:
     transcripts = TranscriptService(session).list_transcripts()
     return TranscriptListResponse(items=[TranscriptRead.model_validate(item) for item in transcripts])
 
 
 @router.post("/transcripts", response_model=TranscriptRead, status_code=status.HTTP_201_CREATED)
-def create_transcript(
+async def create_transcript(
     payload: TranscriptCreate,
     session: Session = Depends(get_session),
 ) -> TranscriptRead:

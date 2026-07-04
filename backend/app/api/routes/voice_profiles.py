@@ -16,18 +16,18 @@ from app.services.voice_profiles import VoiceProfileService
 router = APIRouter(tags=["voice-profiles"])
 
 
-def get_voice_profile_service(session: Session = Depends(get_session)) -> VoiceProfileService:
+async def get_voice_profile_service(session: Session = Depends(get_session)) -> VoiceProfileService:
     return VoiceProfileService(session, ReferenceAudioManager())
 
 
 @router.get("/voice-profiles", response_model=VoiceProfileListResponse)
-def list_voice_profiles(service: VoiceProfileService = Depends(get_voice_profile_service)) -> VoiceProfileListResponse:
+async def list_voice_profiles(service: VoiceProfileService = Depends(get_voice_profile_service)) -> VoiceProfileListResponse:
     items = service.list_profiles()
     return VoiceProfileListResponse(items=[VoiceProfileRead.model_validate(item) for item in items])
 
 
 @router.post("/voice-profiles", response_model=VoiceProfileRead, status_code=status.HTTP_201_CREATED)
-def create_voice_profile(
+async def create_voice_profile(
     payload: VoiceProfileCreateRequest,
     service: VoiceProfileService = Depends(get_voice_profile_service),
 ) -> VoiceProfileRead:
@@ -40,7 +40,7 @@ def create_voice_profile(
 
 
 @router.get("/voice-engines", response_model=VoiceEngineListResponse)
-def list_voice_engines() -> VoiceEngineListResponse:
+async def list_voice_engines() -> VoiceEngineListResponse:
     items = [
         VoiceEngineRead(**XTTSVoiceCloneEngine().status().__dict__),
         VoiceEngineRead(**F5TTSVoiceCloneEngine().status().__dict__),

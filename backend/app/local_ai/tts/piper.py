@@ -1,5 +1,5 @@
 from pathlib import Path
-from subprocess import run
+from subprocess import TimeoutExpired, run
 
 from app.core.config import Settings
 from app.local_ai.tts.base import (
@@ -49,13 +49,22 @@ class PiperEngine(BaseTtsEngine):
             str(output_path),
         ]
 
-        completed = run(
-            command,
-            input=request.text,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            completed = run(
+                command,
+                input=request.text,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=self.settings.tts_timeout_seconds,
+            )
+        except TimeoutExpired as error:
+            raise TtsEngineError(
+                f"Piper timed out after {self.settings.tts_timeout_seconds} seconds.",
+                status_code=504,
+                stdout=error.stdout.decode("utf-8", errors="replace") if isinstance(error.stdout, bytes) else error.stdout,
+                stderr=error.stderr.decode("utf-8", errors="replace") if isinstance(error.stderr, bytes) else error.stderr,
+            ) from error
 
         if completed.returncode != 0:
             raise TtsEngineError(

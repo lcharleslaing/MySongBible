@@ -1,7 +1,6 @@
-from fastapi.testclient import TestClient
 
 
-def test_voice_status_endpoint(client: TestClient) -> None:
+def test_voice_status_endpoint(client) -> None:
     response = client.get("/api/voice/status")
     assert response.status_code == 200
 

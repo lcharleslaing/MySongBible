@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
-import { ApiError } from "../api/client";
+import { ApiError, buildApiUrl } from "../api/client";
 import { TranscriptRecord, transcribeAudioRecording } from "../api/stt";
 import { TtsSynthesisRecord, synthesizeSpeech } from "../api/tts";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -139,28 +139,49 @@ export function VoiceLabPage() {
     }
   };
 
-  const ttsAudioPreviewSrc = useMemo(() => {
+  const [ttsAudioPreviewSrc, setTtsAudioPreviewSrc] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
     if (!ttsResult) {
+      setTtsAudioPreviewSrc("");
+      return;
+    }
+
+    const resolvePreviewUrl = async () => {
+      const candidate = ttsResult.audio_file_url || "";
+      if (!candidate) {
+        setTtsAudioPreviewSrc("");
+        return;
+      }
+
+      const nextUrl = candidate.startsWith("http://") || candidate.startsWith("https://")
+        ? candidate
+        : await buildApiUrl(candidate);
+
+      if (!cancelled) {
+        setTtsAudioPreviewSrc(nextUrl);
+      }
+    };
+
+    resolvePreviewUrl().catch(() => {
+      if (!cancelled) {
+        setTtsAudioPreviewSrc("");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ttsResult]);
+
+  const ttsOutputPath = useMemo(() => {
+    if (!ttsResult?.audio_file_path) {
       return "";
     }
 
-    if (ttsResult.audio_file_url) {
-      return ttsResult.audio_file_url;
-    }
-
-    if (!ttsResult.audio_file_path) {
-      return "";
-    }
-
-    if (ttsResult.audio_file_path.startsWith("http://") || ttsResult.audio_file_path.startsWith("https://")) {
-      return ttsResult.audio_file_path;
-    }
-
-    if (ttsResult.audio_file_path.startsWith("/")) {
-      return `file://${ttsResult.audio_file_path}`;
-    }
-
-    return "";
+    return ttsResult.audio_file_path;
   }, [ttsResult]);
 
   const sendForSynthesis = async () => {
@@ -440,7 +461,7 @@ export function VoiceLabPage() {
                       <span className="badge badge-outline">{ttsResult.engine_used}</span>
                       <span className="badge badge-outline">{ttsResult.status}</span>
                     </div>
-                    <p className="text-sm text-base-content/70 break-all">{ttsResult.audio_file_path}</p>
+                    <p className="text-sm text-base-content/70 break-all">{ttsOutputPath}</p>
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-base-content/50">
@@ -457,7 +478,7 @@ export function VoiceLabPage() {
                       <track kind="captions" />
                     </audio>
                     <p className="text-xs text-base-content/60">
-                      If local file playback is blocked in the current renderer context, the output path above is still available.
+                      Playback is served through the backend audio route instead of direct file access.
                     </p>
                   </div>
                 ) : ttsResult ? (

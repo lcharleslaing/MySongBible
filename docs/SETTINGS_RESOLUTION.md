@@ -4,7 +4,7 @@ AppTemplateBase resolves editable local settings in two layers:
 
 ## 1. Environment Defaults
 
-Environment variables and `.env` files provide the default values used at startup.
+Environment variables and `.env` files provide the default values used at startup. Backend runtime settings are loaded from `backend/.env` when FastAPI runs from the `backend/` directory.
 
 Examples:
 
@@ -16,6 +16,7 @@ Examples:
 - `PIPER_MODEL_PATH`
 - `AUDIO_INPUT_DIR`
 - `TTS_OUTPUT_DIR`
+- `DATABASE_URL`
 
 ## 2. Local Saved Overrides
 
@@ -26,6 +27,7 @@ On future launches:
 - the backend loads environment values first
 - saved local overrides are read from SQLite
 - saved local overrides win over environment defaults
+- `DATABASE_URL` remains startup-only and is not overridden by saved settings
 
 ## Why This Split Exists
 
@@ -43,4 +45,4 @@ On future launches:
 - Piper model path
 - Audio input directory
 - Audio output directory
-- SQLite database path
+- SQLite database path is read-only in the UI. Change `DATABASE_URL` in `backend/.env` and restart the backend to use another database.

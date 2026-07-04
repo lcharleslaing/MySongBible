@@ -13,7 +13,7 @@ export async function synthesizeSpeech(input: {
   voice_profile?: string;
   engine?: string;
 }) {
-  const response = await fetch(buildApiUrl("/api/tts/synthesize"), {
+  const response = await fetch(await buildApiUrl("/api/tts/synthesize"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
