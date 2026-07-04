@@ -1,18 +1,18 @@
 # Frontend Layer
 
-This directory is reserved for the Vite + React + TypeScript renderer application.
+This frontend is a Vite + React + TypeScript renderer application styled with Tailwind CSS and DaisyUI.
 
-Planned responsibilities:
+## Current Scope
 
-- app shell and navigation
-- settings and diagnostics UI
-- voice workflow interfaces
-- typed communication with backend APIs
+- routed starter UI
+- reusable shell with sidebar and topbar
+- DaisyUI theme selector
+- placeholder pages for Home, Voice Lab, Settings, and System Health
+- placeholder service files for future backend integration
 
-Suggested internal layout:
+## Commands
 
-- `src/pages/` route-level screens
-- `src/components/` shared UI pieces
-- `src/features/` feature-grouped UI modules
-- `src/api/` backend API client code
-- `src/styles/` Tailwind and DaisyUI-related styling
+- `npm install`
+- `npm run dev`
+- `npm run build`
+- `npm run typecheck`
