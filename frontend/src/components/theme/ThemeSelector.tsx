@@ -1,7 +1,47 @@
 import { useEffect, useState } from "react";
 
-const themes = ["corporate", "light", "cupcake", "emerald", "night"] as const;
+const themes = [
+  "corporate",
+  "light",
+  "dark",
+  "cupcake",
+  "bumblebee",
+  "emerald",
+  "synthwave",
+  "retro",
+  "cyberpunk",
+  "valentine",
+  "halloween",
+  "garden",
+  "forest",
+  "aqua",
+  "lofi",
+  "pastel",
+  "fantasy",
+  "wireframe",
+  "black",
+  "luxury",
+  "dracula",
+  "cmyk",
+  "autumn",
+  "business",
+  "acid",
+  "lemonade",
+  "night",
+  "coffee",
+  "winter",
+  "dim",
+  "nord",
+  "sunset",
+] as const;
 const storageKey = "apptemplatebase-theme";
+
+function formatThemeLabel(theme: string) {
+  return theme
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export function ThemeSelector() {
   const [theme, setTheme] = useState<string>("corporate");
@@ -31,7 +71,7 @@ export function ThemeSelector() {
       >
         {themes.map((themeOption) => (
           <option key={themeOption} value={themeOption}>
-            {themeOption}
+            {formatThemeLabel(themeOption)}
           </option>
         ))}
       </select>
