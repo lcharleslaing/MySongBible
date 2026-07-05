@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const path = require("node:path");
 
 async function checkBackendHealth(healthUrl) {
   try {
@@ -36,6 +37,10 @@ function normalizeSelectedPath(filePaths) {
   }
 
   return filePaths[0];
+}
+
+function firstExistingPath(paths) {
+  return paths.find((candidate) => candidate && fs.existsSync(candidate)) || undefined;
 }
 
 function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backendController }) {
@@ -88,8 +93,16 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
   });
 
   ipcMain.handle("desktop:pick-piper-binary", async () => {
+    const homeDir = app.getPath("home");
     const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
-      title: "Select Piper Binary",
+      title: "Select Piper Executable (usually named piper)",
+      defaultPath: firstExistingPath([
+        "/usr/local/bin",
+        "/usr/bin",
+        path.join(homeDir, ".local", "bin"),
+        path.join(homeDir, "piper"),
+        homeDir,
+      ]),
       properties: ["openFile"],
     });
 
@@ -100,12 +113,18 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
   });
 
   ipcMain.handle("desktop:pick-piper-model", async () => {
+    const homeDir = app.getPath("home");
     const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
-      title: "Select Piper Model",
+      title: "Select Piper Voice Model (.onnx)",
+      defaultPath: firstExistingPath([
+        path.join(homeDir, "piper", "models"),
+        path.join(homeDir, "piper"),
+        path.join(homeDir, "models"),
+        homeDir,
+      ]),
       properties: ["openFile"],
       filters: [
-        { name: "Piper Models", extensions: ["onnx", "json"] },
-        { name: "All Files", extensions: ["*"] },
+        { name: "Piper Voice Models (.onnx)", extensions: ["onnx"] },
       ],
     });
 

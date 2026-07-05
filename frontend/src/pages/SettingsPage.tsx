@@ -370,6 +370,9 @@ export function SettingsPage() {
                 </div>
                 {formErrors.piperBinaryPath ? <span className="label-text-alt text-error">{formErrors.piperBinaryPath}</span> : null}
                 {formWarnings.piperBinaryPath ? <span className="label-text-alt text-warning">{formWarnings.piperBinaryPath}</span> : null}
+                <span className="label-text-alt text-base-content/60">
+                  Choose the Piper executable itself, usually named <span className="font-mono">piper</span>. If you do not have one installed yet, keep TTS Engine set to Mock.
+                </span>
               </label>
 
               <label className="form-control gap-2">
@@ -389,6 +392,9 @@ export function SettingsPage() {
                 </div>
                 {formErrors.piperModelPath ? <span className="label-text-alt text-error">{formErrors.piperModelPath}</span> : null}
                 {formWarnings.piperModelPath ? <span className="label-text-alt text-warning">{formWarnings.piperModelPath}</span> : null}
+                <span className="label-text-alt text-base-content/60">
+                  Choose the Piper voice <span className="font-mono">.onnx</span> file. Do not choose the matching <span className="font-mono">.onnx.json</span> metadata file.
+                </span>
               </label>
 
               <label className="form-control gap-2">
