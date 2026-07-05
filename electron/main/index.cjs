@@ -16,6 +16,19 @@ if (smokeMode || process.env.APP_TEMPLATE_DISABLE_CHROMIUM_SANDBOX === "1") {
 let mainWindow = null;
 let backendController = null;
 
+const zoomStep = 0.1;
+const minZoomFactor = 0.7;
+const maxZoomFactor = 1.8;
+
+function clampZoomFactor(value) {
+  return Math.min(maxZoomFactor, Math.max(minZoomFactor, value));
+}
+
+function adjustWindowZoom(window, delta) {
+  const currentZoom = window.webContents.getZoomFactor();
+  window.webContents.setZoomFactor(clampZoomFactor(Number((currentZoom + delta).toFixed(2))));
+}
+
 function createMainWindow() {
   const preloadPath = path.join(__dirname, "..", "preload", "index.cjs");
 
@@ -47,7 +60,18 @@ function createMainWindow() {
       return;
     }
 
-    if (input.key === "F11") {
+    const controlOrCommand = input.control || input.meta;
+
+    if (controlOrCommand && ["+", "=", "numadd"].includes(input.key.toLowerCase())) {
+      adjustWindowZoom(window, zoomStep);
+      event.preventDefault();
+    } else if (controlOrCommand && ["-", "numsub"].includes(input.key.toLowerCase())) {
+      adjustWindowZoom(window, -zoomStep);
+      event.preventDefault();
+    } else if (controlOrCommand && input.key === "0") {
+      window.webContents.setZoomFactor(1);
+      event.preventDefault();
+    } else if (input.key === "F11") {
       window.setFullScreen(!window.isFullScreen());
       event.preventDefault();
     } else if (input.key === "Escape" && window.isFullScreen()) {
