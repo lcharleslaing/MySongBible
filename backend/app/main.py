@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,16 +10,23 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.init import initialize_database
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    logger.info("Starting backend lifespan.")
     initialize_database()
-    yield
+    try:
+        yield
+    finally:
+        logger.info("Stopping backend lifespan.")
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings.log_dir)
+    logger.info("Creating FastAPI app '%s'.", settings.app_name)
 
     app = FastAPI(
         title=settings.app_name,

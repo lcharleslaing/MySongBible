@@ -22,9 +22,20 @@ function resolveBackendPaths(isDev) {
   };
 }
 
+function appendLog(logPath, message) {
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  fs.appendFileSync(logPath, message, "utf-8");
+}
+
 function startBackendProcess({ app, isDev }) {
   const disabled = process.env.APP_DISABLE_BACKEND === "1";
+  const logsDir = app.getPath("logs");
+  const backendLogPath = path.join(logsDir, "backend.log");
+  const electronLogPath = path.join(logsDir, "electron-main.log");
+  fs.mkdirSync(logsDir, { recursive: true });
+
   if (disabled) {
+    appendLog(electronLogPath, `${new Date().toISOString()} Backend startup disabled by APP_DISABLE_BACKEND.\n`);
     return null;
   }
 
@@ -34,6 +45,7 @@ function startBackendProcess({ app, isDev }) {
       ? `Backend directory not found, skipping backend startup: ${backendDir}`
       : `Packaged backend resources were not found at ${backendDir}. Production packaging is not fully configured yet; run the app in development mode or add backend resources to the packaged app.`;
     console.warn(message);
+    appendLog(electronLogPath, `${new Date().toISOString()} ${message}\n`);
     return null;
   }
 
@@ -46,7 +58,10 @@ function startBackendProcess({ app, isDev }) {
     BACKEND_HOST: process.env.BACKEND_HOST || host,
     BACKEND_PORT: process.env.BACKEND_PORT || port,
     APP_DATA_DIR: process.env.APP_DATA_DIR || path.join(app.getPath("userData"), "data"),
+    LOG_DIR: process.env.LOG_DIR || logsDir,
   };
+
+  appendLog(electronLogPath, `${new Date().toISOString()} Starting backend from ${backendDir} on ${baseUrl}.\n`);
 
   const child = spawn(
     pythonBinary,
@@ -59,22 +74,31 @@ function startBackendProcess({ app, isDev }) {
   );
 
   child.stdout.on("data", (chunk) => {
-    process.stdout.write(`[backend] ${chunk}`);
+    const message = `[backend] ${chunk}`;
+    process.stdout.write(message);
+    appendLog(backendLogPath, message);
   });
 
   child.stderr.on("data", (chunk) => {
-    process.stderr.write(`[backend] ${chunk}`);
+    const message = `[backend] ${chunk}`;
+    process.stderr.write(message);
+    appendLog(backendLogPath, message);
   });
 
   child.on("error", (error) => {
     console.error("Backend process failed to start:", error);
+    appendLog(electronLogPath, `${new Date().toISOString()} Backend process failed to start: ${error.stack || error.message}\n`);
+  });
+
+  child.on("exit", (code, signal) => {
+    appendLog(electronLogPath, `${new Date().toISOString()} Backend process exited with code ${code ?? "null"} and signal ${signal ?? "null"}.\n`);
   });
 
   return {
     child,
     baseUrl,
     healthUrl: process.env.ELECTRON_BACKEND_HEALTH_URL || `${baseUrl}/api/health`,
-    logsDir: app.getPath("logs"),
+    logsDir,
   };
 }
 

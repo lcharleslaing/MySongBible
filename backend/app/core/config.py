@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "AppTemplateBase Backend"
     app_env: str = "development"
     log_level: str = "INFO"
+    log_dir: Path | None = None
 
     backend_host: str = "127.0.0.1"
     backend_port: int = 8000
@@ -82,6 +83,7 @@ class Settings(BaseSettings):
     @field_validator(
         "whisper_cpp_binary",
         "whisper_model_path",
+        "log_dir",
         "audio_input_dir_override",
         "piper_binary",
         "piper_model_path",
@@ -96,6 +98,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "app_data_dir",
+        "log_dir",
         "whisper_cpp_binary",
         "whisper_model_path",
         "audio_input_dir_override",
