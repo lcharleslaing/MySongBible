@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld("desktop", {
   runLinuxPackage: () => ipcRenderer.invoke("desktop:run-linux-package"),
   reinstallLinuxPackage: () => ipcRenderer.invoke("desktop:reinstall-linux-package"),
   packageAndReinstallLinux: () => ipcRenderer.invoke("desktop:package-and-reinstall-linux"),
+  localAi: {
+    getStatus: () => ipcRenderer.invoke("desktop:local-ai-get-status"),
+    runAction: (payload) => ipcRenderer.invoke("desktop:local-ai-run-action", payload),
+    getLogTail: () => ipcRenderer.invoke("desktop:local-ai-get-log-tail"),
+    openLogsFolder: () => ipcRenderer.invoke("desktop:local-ai-open-logs-folder"),
+  },
   pickWhisperBinary: () => ipcRenderer.invoke("desktop:pick-whisper-binary"),
   pickWhisperModel: () => ipcRenderer.invoke("desktop:pick-whisper-model"),
   pickPiperBinary: () => ipcRenderer.invoke("desktop:pick-piper-binary"),

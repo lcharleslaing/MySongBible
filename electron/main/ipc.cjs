@@ -3,7 +3,57 @@ const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
+const LOCAL_AI_LAST_LINE_LIMIT = 200;
+const LOCAL_AI_CHECK_TIMEOUT_MS = 5 * 60 * 1000;
+const LOCAL_AI_SETUP_TIMEOUT_MS = 60 * 60 * 1000;
+const LOCAL_AI_ACTIONS = {
+  "setup-whisper": {
+    script: "setup:whisper",
+    supportsSetupOptions: true,
+    timeoutMs: LOCAL_AI_SETUP_TIMEOUT_MS,
+  },
+  "setup-piper": {
+    script: "setup:piper",
+    supportsSetupOptions: true,
+    timeoutMs: LOCAL_AI_SETUP_TIMEOUT_MS,
+  },
+  "setup-local-ai": {
+    script: "setup:local-ai",
+    supportsSetupOptions: true,
+    timeoutMs: LOCAL_AI_SETUP_TIMEOUT_MS,
+  },
+  "check-stt": {
+    script: "stt:check",
+    supportsSetupOptions: false,
+    timeoutMs: LOCAL_AI_CHECK_TIMEOUT_MS,
+  },
+  "check-tts": {
+    script: "tts:check",
+    supportsSetupOptions: false,
+    timeoutMs: LOCAL_AI_CHECK_TIMEOUT_MS,
+  },
+  "check-local-ai": {
+    script: "check:local-ai",
+    supportsSetupOptions: false,
+    timeoutMs: LOCAL_AI_CHECK_TIMEOUT_MS,
+  },
+};
 let packageJob = null;
+let localAiJob = null;
+let localAiLastStatus = {
+  running: false,
+  action: null,
+  startedAt: null,
+  finishedAt: null,
+  exitCode: null,
+  status: "idle",
+  message: "No Local AI job has run yet.",
+  logPath: null,
+  lastLines: [],
+  passCount: 0,
+  warnCount: 0,
+  failCount: 0,
+};
 
 async function checkBackendHealth(healthUrl) {
   try {
@@ -50,6 +100,244 @@ function firstExistingPath(paths) {
 function appendLog(logPath, message) {
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   fs.appendFileSync(logPath, message, "utf-8");
+}
+
+function getNpmCommand() {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+function getLocalAiLogPath(app) {
+  return path.join(app.getPath("logs"), "local-ai-setup.log");
+}
+
+function cloneLocalAiStatus(status) {
+  return {
+    ...status,
+    lastLines: [...status.lastLines],
+  };
+}
+
+function getLocalAiStatus(app) {
+  return cloneLocalAiStatus({
+    ...localAiLastStatus,
+    running: Boolean(localAiJob),
+    logPath: getLocalAiLogPath(app),
+  });
+}
+
+function recordLocalAiOutput(text) {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const displayLines = lines.filter((line) => line.length > 0);
+
+  for (const line of displayLines) {
+    if (/^PASS\b/.test(line)) {
+      localAiLastStatus.passCount += 1;
+    } else if (/^WARN\b/.test(line)) {
+      localAiLastStatus.warnCount += 1;
+    } else if (/^FAIL\b/.test(line)) {
+      localAiLastStatus.failCount += 1;
+    }
+  }
+
+  localAiLastStatus.lastLines = [...localAiLastStatus.lastLines, ...displayLines]
+    .slice(-LOCAL_AI_LAST_LINE_LIMIT);
+}
+
+function buildLocalAiCommand(payload) {
+  const options = payload && typeof payload === "object" ? payload : {};
+  const allowedKeys = new Set(["action", "dryRun", "force"]);
+  const unknownKeys = Object.keys(options).filter((key) => !allowedKeys.has(key));
+  if (unknownKeys.length > 0) {
+    return {
+      ok: false,
+      message: `Unsupported Local AI option(s): ${unknownKeys.join(", ")}`,
+    };
+  }
+
+  const action = options.action;
+  const definition = LOCAL_AI_ACTIONS[action];
+  if (!definition) {
+    return {
+      ok: false,
+      message: `Unsupported Local AI action: ${action || "missing"}`,
+    };
+  }
+
+  if (typeof options.dryRun !== "undefined" && typeof options.dryRun !== "boolean") {
+    return {
+      ok: false,
+      message: "Local AI option dryRun must be a boolean.",
+    };
+  }
+
+  if (typeof options.force !== "undefined" && typeof options.force !== "boolean") {
+    return {
+      ok: false,
+      message: "Local AI option force must be a boolean.",
+    };
+  }
+
+  const scriptArgs = [];
+  if (options.dryRun || options.force) {
+    if (!definition.supportsSetupOptions) {
+      return {
+        ok: false,
+        message: `Local AI action ${action} does not support dryRun or force.`,
+      };
+    }
+
+    scriptArgs.push("--");
+    if (options.dryRun) {
+      scriptArgs.push("--dry-run");
+    }
+    if (options.force) {
+      scriptArgs.push("--force");
+    }
+  }
+
+  return {
+    ok: true,
+    action,
+    command: getNpmCommand(),
+    args: ["run", definition.script, ...scriptArgs],
+    timeoutMs: definition.timeoutMs,
+  };
+}
+
+function rejectLocalAiRun(app, message) {
+  localAiLastStatus = {
+    ...localAiLastStatus,
+    running: Boolean(localAiJob),
+    message,
+    logPath: getLocalAiLogPath(app),
+  };
+
+  return {
+    ok: false,
+    message,
+    ...getLocalAiStatus(app),
+  };
+}
+
+function runLocalAiAction(app, payload) {
+  if (localAiJob) {
+    return rejectLocalAiRun(app, `A Local AI job is already running: ${localAiJob.action}`);
+  }
+
+  const commandSpec = buildLocalAiCommand(payload);
+  if (!commandSpec.ok) {
+    return rejectLocalAiRun(app, commandSpec.message);
+  }
+
+  const logPath = getLocalAiLogPath(app);
+  const startedAt = new Date().toISOString();
+  const commandText = `${commandSpec.command} ${commandSpec.args.join(" ")}`;
+  localAiLastStatus = {
+    running: true,
+    action: commandSpec.action,
+    startedAt,
+    finishedAt: null,
+    exitCode: null,
+    status: "running",
+    message: `Local AI ${commandSpec.action} started.`,
+    logPath,
+    lastLines: [],
+    passCount: 0,
+    warnCount: 0,
+    failCount: 0,
+  };
+
+  appendLog(logPath, [
+    "",
+    "==== Local AI job started ====",
+    `Action: ${commandSpec.action}`,
+    `Started: ${startedAt}`,
+    `Command: ${commandText}`,
+    "==== Output ====",
+    "",
+  ].join("\n"));
+
+  const child = spawn(commandSpec.command, commandSpec.args, {
+    cwd: repoRoot,
+    env: process.env,
+    stdio: "pipe",
+    shell: false,
+  });
+
+  localAiJob = {
+    action: commandSpec.action,
+    child,
+    timedOut: false,
+  };
+
+  const timeout = setTimeout(() => {
+    if (!localAiJob || localAiJob.child !== child) {
+      return;
+    }
+
+    localAiJob.timedOut = true;
+    const message = `Local AI ${commandSpec.action} timed out after ${Math.round(commandSpec.timeoutMs / 60000)} minutes.`;
+    appendLog(logPath, `\n[${new Date().toISOString()}] ${message}\n`);
+    recordLocalAiOutput(`FAIL ${message}`);
+    child.kill();
+  }, commandSpec.timeoutMs);
+
+  child.stdout.on("data", (chunk) => {
+    const text = chunk.toString();
+    appendLog(logPath, text);
+    recordLocalAiOutput(text);
+  });
+
+  child.stderr.on("data", (chunk) => {
+    const text = chunk.toString();
+    appendLog(logPath, text);
+    recordLocalAiOutput(text);
+  });
+
+  child.on("error", (error) => {
+    clearTimeout(timeout);
+    const finishedAt = new Date().toISOString();
+    const message = `Failed to start Local AI ${commandSpec.action}: ${error.message}`;
+    appendLog(logPath, `\n[${finishedAt}] ${message}\n`);
+    recordLocalAiOutput(`FAIL ${message}`);
+    localAiJob = null;
+    localAiLastStatus = {
+      ...localAiLastStatus,
+      running: false,
+      finishedAt,
+      exitCode: null,
+      status: "failed",
+      message,
+    };
+  });
+
+  child.on("close", (code) => {
+    clearTimeout(timeout);
+    const finishedAt = new Date().toISOString();
+    const timedOut = localAiJob?.child === child && localAiJob.timedOut;
+    const status = timedOut ? "timed_out" : code === 0 ? "succeeded" : "failed";
+    const message = timedOut
+      ? `Local AI ${commandSpec.action} timed out.`
+      : code === 0
+        ? `Local AI ${commandSpec.action} completed.`
+        : `Local AI ${commandSpec.action} failed with exit code ${code}.`;
+    appendLog(logPath, `\n[${finishedAt}] ${message}\n`);
+    localAiJob = null;
+    localAiLastStatus = {
+      ...localAiLastStatus,
+      running: false,
+      finishedAt,
+      exitCode: code,
+      status,
+      message,
+    };
+  });
+
+  return {
+    ok: true,
+    message: localAiLastStatus.message,
+    ...getLocalAiStatus(app),
+  };
 }
 
 function findNewestDeb(releaseDir) {
@@ -264,6 +552,30 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
   ipcMain.handle("desktop:reinstall-linux-package", () => runReinstall(app));
 
   ipcMain.handle("desktop:package-and-reinstall-linux", () => runPackageAndReinstall(app));
+
+  ipcMain.handle("desktop:local-ai-get-status", () => getLocalAiStatus(app));
+
+  ipcMain.handle("desktop:local-ai-run-action", (_event, payload) => runLocalAiAction(app, payload));
+
+  ipcMain.handle("desktop:local-ai-get-log-tail", () => {
+    const status = getLocalAiStatus(app);
+    return {
+      logPath: status.logPath,
+      lastLines: status.lastLines,
+    };
+  });
+
+  ipcMain.handle("desktop:local-ai-open-logs-folder", async () => {
+    const logsDir = app.getPath("logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    const result = await shell.openPath(logsDir);
+
+    return {
+      ok: result === "",
+      path: logsDir,
+      message: result || null,
+    };
+  });
 
   ipcMain.handle("desktop:pick-whisper-binary", async () => {
     const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
