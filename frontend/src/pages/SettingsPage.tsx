@@ -251,6 +251,16 @@ function formatFileSize(sizeBytes: number) {
   return `${sizeBytes} bytes`;
 }
 
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function findNewestDebArtifact(artifacts: PackageArtifact[]) {
+  return artifacts
+    .filter((artifact) => artifact.name.endsWith(".deb"))
+    .sort((left, right) => new Date(right.modifiedAt).getTime() - new Date(left.modifiedAt).getTime())[0] || null;
+}
+
 export function SettingsPage() {
   const { setAppDefinition } = useAppDefinition();
   const [formState, setFormState] = useState<FormState>(initialFormState);
@@ -275,6 +285,8 @@ export function SettingsPage() {
   const piperStatus = findVoiceEngineStatus(voiceStatus, "piper");
   const mockStatus = findVoiceEngineStatus(voiceStatus, "mock");
   const packageActionRunning = Boolean(packageStatus?.running);
+  const newestDebArtifact = packageStatus ? findNewestDebArtifact(packageStatus.artifacts) : null;
+  const installCommand = newestDebArtifact ? `sudo apt install -y ${shellQuote(newestDebArtifact.path)}` : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -381,6 +393,21 @@ export function SettingsPage() {
     const result = await window.desktop?.openReleaseFolder();
     if (result) {
       setPackageMessage(result.ok ? `Opened ${result.path}` : result.message || "Could not open release folder.");
+    }
+  };
+
+  const copyInstallCommand = async () => {
+    if (!installCommand) {
+      setPackageError("No .deb artifact found yet. Build Linux packages first.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(installCommand);
+      setPackageMessage("Install command copied. Paste it into a new terminal to install or replace the app.");
+      setPackageError("");
+    } catch {
+      setPackageError("Could not copy automatically. Select the command text and copy it manually.");
     }
   };
 
@@ -1015,6 +1042,30 @@ export function SettingsPage() {
               ) : (
                 <p className="mt-3 text-sm text-base-content/60">No release artifacts found yet.</p>
               )}
+
+              <div className="mt-4 rounded border border-base-300 bg-base-100 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/60">Terminal Install Command</p>
+                {installCommand ? (
+                  <>
+                    <pre className="mt-2 max-w-full overflow-x-auto rounded bg-base-300 p-2 text-xs"><code>{installCommand}</code></pre>
+                    <p className="mt-2 text-xs text-base-content/60">
+                      Open a fresh terminal, paste this command, and enter your password when Linux asks.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-xs text-base-content/60">
+                    Build Linux packages first, then this will show the exact install command for the newest <span className="font-mono">.deb</span>.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-outline btn-xs mt-3"
+                  disabled={!installCommand}
+                  onClick={copyInstallCommand}
+                >
+                  Copy Install Command
+                </button>
+              </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button type="button" className="btn btn-outline btn-xs" onClick={refreshPackageStatus} disabled={packageActionRunning}>
