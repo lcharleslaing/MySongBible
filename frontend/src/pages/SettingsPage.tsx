@@ -59,6 +59,11 @@ type PackageStatus = {
   logsPath: string;
   releaseDir: string;
   artifacts: PackageArtifact[];
+  installStatus: {
+    packageName: string;
+    installed: boolean;
+    version: string | null;
+  };
 };
 
 const initialFormState: FormState = {
@@ -976,7 +981,25 @@ export function SettingsPage() {
             <h2 className="card-title text-xl">Build & Package</h2>
 
             <div className="rounded-box bg-base-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Linux Outputs</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Linux Outputs</p>
+                  {packageStatus ? (
+                    <p className="mt-1 text-xs text-base-content/60">
+                      Debian package: <span className="font-mono">{packageStatus.installStatus.packageName}</span>
+                    </p>
+                  ) : null}
+                </div>
+                {packageStatus ? (
+                  <span className={`badge ${packageStatus.installStatus.installed ? "badge-success" : "badge-warning"}`}>
+                    {packageStatus.installStatus.installed
+                      ? `Installed${packageStatus.installStatus.version ? ` ${packageStatus.installStatus.version}` : ""}`
+                      : "Not installed"}
+                  </span>
+                ) : (
+                  <span className="badge badge-ghost">Checking install</span>
+                )}
+              </div>
               <p className="mt-3 text-sm text-base-content/70">
                 Build both a Debian installer and an AppImage for this Linux machine. Reinstall uses the newest generated <span className="font-mono">.deb</span>.
               </p>

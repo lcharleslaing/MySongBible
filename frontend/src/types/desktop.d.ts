@@ -66,6 +66,11 @@ declare global {
     logsPath: string;
     releaseDir: string;
     artifacts: PackageArtifact[];
+    installStatus: {
+      packageName: string;
+      installed: boolean;
+      version: string | null;
+    };
   };
 
   type PackageActionResult = PackageStatusResult & {

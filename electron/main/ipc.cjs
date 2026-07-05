@@ -90,6 +90,31 @@ function getPackageArtifacts() {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function getPackageName() {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+    return packageJson.name || "apptemplatebase";
+  } catch {
+    return "apptemplatebase";
+  }
+}
+
+function getDebInstallStatus() {
+  const packageName = getPackageName();
+  const result = spawnSync("dpkg-query", ["-W", "-f=${Status}\t${Version}", packageName], {
+    encoding: "utf-8",
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  const installed = result.status === 0 && output.includes("install ok installed");
+  const version = installed ? output.split("\t")[1] || null : null;
+
+  return {
+    packageName,
+    installed,
+    version,
+  };
+}
+
 function getPackageStatus(app) {
   return {
     running: Boolean(packageJob),
@@ -98,6 +123,7 @@ function getPackageStatus(app) {
     logsPath: path.join(app.getPath("logs"), "build-package.log"),
     releaseDir: path.join(repoRoot, "release"),
     artifacts: getPackageArtifacts(),
+    installStatus: getDebInstallStatus(),
   };
 }
 
