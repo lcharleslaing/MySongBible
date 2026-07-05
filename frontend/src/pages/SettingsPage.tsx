@@ -12,12 +12,14 @@ type FormState = {
   ttsEngine: string;
   piperBinaryPath: string;
   piperModelPath: string;
+  ttsTimeoutSeconds: string;
   sqliteDatabasePath: string;
   audioInputDirectory: string;
   audioOutputDirectory: string;
 };
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
+type FormWarnings = Partial<Record<keyof FormState, string>>;
 
 const initialFormState: FormState = {
   whisperBinaryPath: "",
@@ -26,6 +28,7 @@ const initialFormState: FormState = {
   ttsEngine: "mock",
   piperBinaryPath: "",
   piperModelPath: "",
+  ttsTimeoutSeconds: "120",
   sqliteDatabasePath: "./data/app_template_base.sqlite3",
   audioInputDirectory: "./data/audio/input",
   audioOutputDirectory: "./data/audio/tts",
@@ -39,6 +42,7 @@ function buildFormState(data: SettingsRecord): FormState {
     ttsEngine: data.tts_engine,
     piperBinaryPath: data.piper_binary || "",
     piperModelPath: data.piper_model_path || "",
+    ttsTimeoutSeconds: String(data.tts_timeout_seconds),
     sqliteDatabasePath: data.sqlite_database_path,
     audioInputDirectory: data.audio_input_dir,
     audioOutputDirectory: data.tts_output_dir || "./data/audio/tts",
@@ -48,13 +52,18 @@ function buildFormState(data: SettingsRecord): FormState {
 function validateForm(formState: FormState): FormErrors {
   const errors: FormErrors = {};
   const threadCount = Number(formState.whisperThreadCount);
+  const timeoutSeconds = Number(formState.ttsTimeoutSeconds);
 
   if (!Number.isInteger(threadCount) || threadCount < 1 || threadCount > 64) {
     errors.whisperThreadCount = "Thread count must be an integer between 1 and 64.";
   }
 
-  if (!formState.ttsEngine.trim()) {
-    errors.ttsEngine = "Choose a TTS engine.";
+  if (!["mock", "piper"].includes(formState.ttsEngine)) {
+    errors.ttsEngine = "TTS engine must be mock or piper.";
+  }
+
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+    errors.ttsTimeoutSeconds = "TTS timeout must be a positive number.";
   }
 
   if (!formState.sqliteDatabasePath.trim()) {
@@ -69,17 +78,23 @@ function validateForm(formState: FormState): FormErrors {
     errors.audioOutputDirectory = "Audio output directory is required.";
   }
 
+  return errors;
+}
+
+function buildWarnings(formState: FormState): FormWarnings {
+  const warnings: FormWarnings = {};
+
   if (formState.ttsEngine === "piper") {
     if (!formState.piperBinaryPath.trim()) {
-      errors.piperBinaryPath = "Piper binary path is required when Piper is selected.";
+      warnings.piperBinaryPath = "Piper is selected, but the binary path is blank. Voice Lab will keep Piper selected and report a configuration error until this is set.";
     }
 
     if (!formState.piperModelPath.trim()) {
-      errors.piperModelPath = "Piper model path is required when Piper is selected.";
+      warnings.piperModelPath = "Piper is selected, but the model path is blank. Voice Lab will keep Piper selected and report a configuration error until this is set.";
     }
   }
 
-  return errors;
+  return warnings;
 }
 
 function buildPayload(formState: FormState): SettingsUpdatePayload {
@@ -92,7 +107,12 @@ function buildPayload(formState: FormState): SettingsUpdatePayload {
     piper_model_path: formState.piperModelPath.trim() || null,
     audio_input_dir: formState.audioInputDirectory.trim(),
     tts_output_dir: formState.audioOutputDirectory.trim(),
+    tts_timeout_seconds: Number(formState.ttsTimeoutSeconds),
   };
+}
+
+function findVoiceEngineStatus(voiceStatus: VoiceStatusRecord | null, engineId: string) {
+  return voiceStatus?.engines.find((engine) => engine.id === engineId) || null;
 }
 
 export function SettingsPage() {
@@ -108,8 +128,11 @@ export function SettingsPage() {
   const [databasePathNote, setDatabasePathNote] = useState("SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database.");
 
   const formErrors = useMemo(() => validateForm(formState), [formState]);
+  const formWarnings = useMemo(() => buildWarnings(formState), [formState]);
   const hasValidationErrors = Object.keys(formErrors).length > 0;
   const isDirty = JSON.stringify(formState) !== JSON.stringify(savedState);
+  const piperStatus = findVoiceEngineStatus(voiceStatus, "piper");
+  const mockStatus = findVoiceEngineStatus(voiceStatus, "mock");
 
   useEffect(() => {
     let cancelled = false;
@@ -327,6 +350,7 @@ export function SettingsPage() {
                   <option value="piper">Piper</option>
                 </select>
                 {formErrors.ttsEngine ? <span className="label-text-alt text-error">{formErrors.ttsEngine}</span> : null}
+                <span className="label-text-alt text-base-content/60">Saved exactly as selected. Piper is never silently changed back to Mock.</span>
               </label>
 
               <label className="form-control gap-2">
@@ -345,6 +369,7 @@ export function SettingsPage() {
                   </button>
                 </div>
                 {formErrors.piperBinaryPath ? <span className="label-text-alt text-error">{formErrors.piperBinaryPath}</span> : null}
+                {formWarnings.piperBinaryPath ? <span className="label-text-alt text-warning">{formWarnings.piperBinaryPath}</span> : null}
               </label>
 
               <label className="form-control gap-2">
@@ -363,6 +388,20 @@ export function SettingsPage() {
                   </button>
                 </div>
                 {formErrors.piperModelPath ? <span className="label-text-alt text-error">{formErrors.piperModelPath}</span> : null}
+                {formWarnings.piperModelPath ? <span className="label-text-alt text-warning">{formWarnings.piperModelPath}</span> : null}
+              </label>
+
+              <label className="form-control gap-2">
+                <span className="label-text font-medium">TTS Timeout Seconds</span>
+                <input
+                  type="number"
+                  min={1}
+                  className={`input input-bordered ${formErrors.ttsTimeoutSeconds ? "input-error" : ""}`}
+                  value={formState.ttsTimeoutSeconds}
+                  onChange={(event) => setField("ttsTimeoutSeconds", event.target.value)}
+                  disabled={isLoading || isSaving}
+                />
+                {formErrors.ttsTimeoutSeconds ? <span className="label-text-alt text-error">{formErrors.ttsTimeoutSeconds}</span> : null}
               </label>
 
               <label className="form-control gap-2">
@@ -383,7 +422,7 @@ export function SettingsPage() {
               </label>
 
               <label className="form-control gap-2">
-                <span className="label-text font-medium">Audio Output Directory</span>
+                <span className="label-text font-medium">TTS Output Directory</span>
                 <div className="join">
                   <input
                     type="text"
@@ -397,6 +436,7 @@ export function SettingsPage() {
                   </button>
                 </div>
                 {formErrors.audioOutputDirectory ? <span className="label-text-alt text-error">{formErrors.audioOutputDirectory}</span> : null}
+                <span className="label-text-alt text-base-content/60">Used for generated TTS audio files from Voice Lab.</span>
               </label>
 
               <label className="form-control gap-2 lg:col-span-2">
@@ -464,9 +504,42 @@ export function SettingsPage() {
             </div>
 
             <div className="rounded-box bg-base-200 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">TTS Readiness</p>
+              {voiceStatus ? (
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Mock</p>
+                      <p className="mt-1 text-xs text-base-content/60">{mockStatus?.message || "Mock TTS is available for testing."}</p>
+                    </div>
+                    <span className="badge badge-success">ready</span>
+                  </div>
+
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Piper</p>
+                      <p className="mt-1 text-xs text-base-content/60">{piperStatus?.message || "Piper status is not available."}</p>
+                    </div>
+                    <span className={`badge ${piperStatus?.available ? "badge-success" : "badge-warning"}`}>
+                      {piperStatus?.available ? "ready" : "not configured"}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-base-content/50">TTS readiness is not available yet.</p>
+              )}
+            </div>
+
+            <div className="alert alert-info">
+              <span className="text-sm">
+                Run <span className="font-mono">npm run tts:check</span> in a terminal to verify Piper. The desktop app does not run npm scripts for you.
+              </span>
+            </div>
+
+            <div className="rounded-box bg-base-200 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Resolution Order</p>
               <p className="mt-3 text-sm text-base-content/70">
-                Environment variables act as defaults. Saved local settings override those defaults on future launches.
+                Environment variables act as defaults. Saved local settings override those defaults for later STT/TTS requests. Only the SQLite database path requires editing the backend environment and restarting.
               </p>
             </div>
           </div>

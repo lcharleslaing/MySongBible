@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PublicSettingsResponse(BaseModel):
@@ -17,6 +17,7 @@ class PublicSettingsResponse(BaseModel):
     piper_binary: str | None = None
     piper_model_path: str | None = None
     tts_output_dir: str | None = None
+    tts_timeout_seconds: int
     database_path_editable: bool = False
     database_path_note: str = "SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database."
 
@@ -30,4 +31,13 @@ class SettingsUpdateRequest(BaseModel):
     piper_model_path: str | None = None
     audio_input_dir: str = Field(min_length=1)
     tts_output_dir: str = Field(min_length=1)
+    tts_timeout_seconds: int = Field(gt=0)
     sqlite_database_path: str | None = Field(default=None, min_length=1)
+
+    @field_validator("tts_engine")
+    @classmethod
+    def validate_tts_engine(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"mock", "piper"}:
+            raise ValueError("TTS engine must be mock or piper.")
+        return normalized

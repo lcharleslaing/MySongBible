@@ -45,6 +45,7 @@ class SettingsService:
             str(self.base_settings.piper_model_path) if self.base_settings.piper_model_path else None,
         )
         tts_output_dir = overrides.get("tts_output_dir", str(self.base_settings.audio_tts_dir))
+        tts_timeout_seconds = int(overrides.get("tts_timeout_seconds", self.base_settings.tts_timeout_seconds))
 
         return PublicSettingsResponse(
             app_name=self.base_settings.app_name,
@@ -62,6 +63,7 @@ class SettingsService:
             piper_binary=piper_binary,
             piper_model_path=piper_model_path,
             tts_output_dir=tts_output_dir,
+            tts_timeout_seconds=tts_timeout_seconds,
         )
 
     def update_settings(self, payload: SettingsUpdateRequest) -> PublicSettingsResponse:
@@ -81,6 +83,7 @@ class SettingsService:
             "piper_model_path": payload.piper_model_path or "",
             "audio_input_dir": payload.audio_input_dir,
             "tts_output_dir": payload.tts_output_dir,
+            "tts_timeout_seconds": str(payload.tts_timeout_seconds),
         }
 
         for key, value in updates.items():
@@ -102,6 +105,7 @@ class SettingsService:
                 "piper_binary": Path(public_settings.piper_binary) if public_settings.piper_binary else None,
                 "piper_model_path": Path(public_settings.piper_model_path) if public_settings.piper_model_path else None,
                 "tts_output_dir": Path(public_settings.tts_output_dir) if public_settings.tts_output_dir else self.base_settings.audio_tts_dir,
+                "tts_timeout_seconds": public_settings.tts_timeout_seconds,
             }
         )
 

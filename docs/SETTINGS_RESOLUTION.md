@@ -16,6 +16,7 @@ Examples:
 - `PIPER_MODEL_PATH`
 - `AUDIO_INPUT_DIR`
 - `TTS_OUTPUT_DIR`
+- `TTS_TIMEOUT_SECONDS`
 - `DATABASE_URL`
 
 ## 2. Local Saved Overrides
@@ -28,6 +29,8 @@ On future launches:
 - saved local overrides are read from SQLite
 - saved local overrides win over environment defaults
 - `DATABASE_URL` remains startup-only and is not overridden by saved settings
+
+During the current backend process, saved voice and audio settings are also used for later STT/TTS requests through the runtime settings service. `DATABASE_URL` is the setting that requires editing the backend environment and restarting.
 
 ## Why This Split Exists
 
@@ -43,6 +46,7 @@ On future launches:
 - TTS engine
 - Piper binary path
 - Piper model path
+- TTS output directory
+- TTS timeout seconds
 - Audio input directory
-- Audio output directory
 - SQLite database path is read-only in the UI. Change `DATABASE_URL` in `backend/.env` and restart the backend to use another database.

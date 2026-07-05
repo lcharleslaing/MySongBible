@@ -16,6 +16,7 @@ export type SettingsRecord = {
   piper_binary: string | null;
   piper_model_path: string | null;
   tts_output_dir: string | null;
+  tts_timeout_seconds: number;
   database_path_editable: boolean;
   database_path_note: string;
 };
@@ -29,6 +30,7 @@ export type SettingsUpdatePayload = {
   piper_model_path: string | null;
   audio_input_dir: string;
   tts_output_dir: string;
+  tts_timeout_seconds: number;
 };
 
 export async function getSettings() {
