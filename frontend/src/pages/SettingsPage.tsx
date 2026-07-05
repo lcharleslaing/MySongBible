@@ -45,6 +45,22 @@ type FormState = {
 type FormErrors = Partial<Record<keyof FormState, string>>;
 type FormWarnings = Partial<Record<keyof FormState, string>>;
 
+type PackageArtifact = {
+  name: string;
+  path: string;
+  sizeBytes: number;
+  modifiedAt: string;
+};
+
+type PackageStatus = {
+  running: boolean;
+  action: string | null;
+  startedAt: string | null;
+  logsPath: string;
+  releaseDir: string;
+  artifacts: PackageArtifact[];
+};
+
 const initialFormState: FormState = {
   packageName: "apptemplatebase",
   appVersion: "0.1.0",
@@ -225,6 +241,16 @@ function findVoiceEngineStatus(voiceStatus: VoiceStatusRecord | null, engineId: 
   return voiceStatus?.engines.find((engine) => engine.id === engineId) || null;
 }
 
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes > 1024 * 1024) {
+    return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+  if (sizeBytes > 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+  return `${sizeBytes} bytes`;
+}
+
 export function SettingsPage() {
   const { setAppDefinition } = useAppDefinition();
   const [formState, setFormState] = useState<FormState>(initialFormState);
@@ -236,6 +262,9 @@ export function SettingsPage() {
   const [backendHealth, setBackendHealth] = useState<string>("loading");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatusRecord | null>(null);
   const [deviceProfiles, setDeviceProfiles] = useState<DeviceSettingsProfileRecord[]>([]);
+  const [packageStatus, setPackageStatus] = useState<PackageStatus | null>(null);
+  const [packageMessage, setPackageMessage] = useState("");
+  const [packageError, setPackageError] = useState("");
   const [statusError, setStatusError] = useState("");
   const [databasePathNote, setDatabasePathNote] = useState("SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database.");
 
@@ -245,6 +274,7 @@ export function SettingsPage() {
   const isDirty = JSON.stringify(formState) !== JSON.stringify(savedState);
   const piperStatus = findVoiceEngineStatus(voiceStatus, "piper");
   const mockStatus = findVoiceEngineStatus(voiceStatus, "mock");
+  const packageActionRunning = Boolean(packageStatus?.running);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,6 +298,10 @@ export function SettingsPage() {
         setDeviceProfiles(settings.device_profiles);
         setBackendHealth(health.status);
         setVoiceStatus(voice);
+        const packageInfo = await window.desktop?.getPackageStatus();
+        if (packageInfo) {
+          setPackageStatus(packageInfo);
+        }
         setStatusMessage("Loaded local settings. Environment values remain the defaults until you override them here.");
       } catch (error) {
         if (cancelled) {
@@ -297,6 +331,57 @@ export function SettingsPage() {
       [key]: value,
     }));
     setSaveError("");
+  };
+
+  const runPackageAction = async (action: "build" | "reinstall" | "buildAndReinstall") => {
+    try {
+      setPackageError("");
+      setPackageMessage(
+        action === "build"
+          ? "Building .deb and AppImage..."
+          : action === "reinstall"
+            ? "Starting Linux reinstall..."
+            : "Building packages, then reinstalling the newest .deb...",
+      );
+
+      const result = action === "build"
+        ? await window.desktop?.runLinuxPackage()
+        : action === "reinstall"
+          ? await window.desktop?.reinstallLinuxPackage()
+          : await window.desktop?.packageAndReinstallLinux();
+
+      if (!result) {
+        setPackageError("Desktop packaging actions are unavailable in this environment.");
+        return;
+      }
+
+      setPackageStatus(result);
+      if (result.ok) {
+        setPackageMessage(result.message);
+      } else {
+        setPackageError(result.message);
+        setPackageMessage("");
+      }
+    } catch (error) {
+      setPackageError(error instanceof Error ? error.message : "Packaging action failed.");
+      setPackageMessage("");
+    }
+  };
+
+  const refreshPackageStatus = async () => {
+    const result = await window.desktop?.getPackageStatus();
+    if (result) {
+      setPackageStatus(result);
+      setPackageMessage("Package status refreshed.");
+      setPackageError("");
+    }
+  };
+
+  const openReleaseFolder = async () => {
+    const result = await window.desktop?.openReleaseFolder();
+    if (result) {
+      setPackageMessage(result.ok ? `Opened ${result.path}` : result.message || "Could not open release folder.");
+    }
   };
 
   const saveSettings = async () => {
@@ -861,6 +946,103 @@ export function SettingsPage() {
 
         <div className="card border border-base-300 bg-base-100 shadow-sm">
           <div className="card-body gap-4">
+            <h2 className="card-title text-xl">Build & Package</h2>
+
+            <div className="rounded-box bg-base-200 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Linux Outputs</p>
+              <p className="mt-3 text-sm text-base-content/70">
+                Build both a Debian installer and an AppImage for this Linux machine. Reinstall uses the newest generated <span className="font-mono">.deb</span>.
+              </p>
+
+              <div className="mt-4 grid gap-2">
+                <button
+                  type="button"
+                  className={`btn btn-primary btn-sm ${packageActionRunning && packageStatus?.action === "Build Linux packages" ? "loading" : ""}`}
+                  disabled={packageActionRunning}
+                  onClick={() => runPackageAction("build")}
+                >
+                  Build .deb + AppImage
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${packageActionRunning && packageStatus?.action === "Install latest .deb" ? "loading" : ""}`}
+                  disabled={packageActionRunning}
+                  onClick={() => runPackageAction("reinstall")}
+                >
+                  Reinstall Latest .deb
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={packageActionRunning}
+                  onClick={() => runPackageAction("buildAndReinstall")}
+                >
+                  Build Then Reinstall
+                </button>
+              </div>
+
+              {packageMessage ? (
+                <div className="alert alert-success mt-4 py-2">
+                  <span className="text-xs">{packageMessage}</span>
+                </div>
+              ) : null}
+
+              {packageError ? (
+                <div className="alert alert-error mt-4 py-2">
+                  <span className="text-xs">{packageError}</span>
+                </div>
+              ) : null}
+
+              {packageStatus?.running ? (
+                <div className="alert mt-4 py-2">
+                  <span className="loading loading-spinner loading-xs" />
+                  <span className="text-xs">{packageStatus.action} started at {packageStatus.startedAt}</span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-box bg-base-200 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Artifacts</p>
+              {packageStatus?.artifacts.length ? (
+                <div className="mt-3 space-y-2">
+                  {packageStatus.artifacts.map((artifact) => (
+                    <div key={artifact.path} className="rounded border border-base-300 bg-base-100 p-2">
+                      <p className="truncate text-sm font-medium">{artifact.name}</p>
+                      <p className="text-xs text-base-content/60">{formatFileSize(artifact.sizeBytes)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-base-content/60">No release artifacts found yet.</p>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" className="btn btn-outline btn-xs" onClick={refreshPackageStatus} disabled={packageActionRunning}>
+                  Refresh
+                </button>
+                <button type="button" className="btn btn-outline btn-xs" onClick={openReleaseFolder}>
+                  Open Release
+                </button>
+                <button type="button" className="btn btn-outline btn-xs" onClick={async () => {
+                  const result = await window.desktop?.openLogsFolder();
+                  if (result) {
+                    setPackageMessage(result.ok ? `Opened ${result.path}` : result.message || "Could not open logs folder.");
+                  }
+                }}>
+                  Open Logs
+                </button>
+              </div>
+
+              {packageStatus ? (
+                <div className="mt-4 space-y-1 text-xs text-base-content/60">
+                  <p className="break-all"><span className="font-medium">Release:</span> {packageStatus.releaseDir}</p>
+                  <p className="break-all"><span className="font-medium">Log:</span> {packageStatus.logsPath}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="divider my-1" />
+
             <h2 className="card-title text-xl">Backend Status</h2>
             {statusError ? (
               <div className="alert alert-error">

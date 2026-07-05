@@ -16,6 +16,15 @@ declare global {
         path: string;
         message: string | null;
       }>;
+      openReleaseFolder: () => Promise<{
+        ok: boolean;
+        path: string;
+        message: string | null;
+      }>;
+      getPackageStatus: () => Promise<PackageStatusResult>;
+      runLinuxPackage: () => Promise<PackageActionResult>;
+      reinstallLinuxPackage: () => Promise<PackageActionResult>;
+      packageAndReinstallLinux: () => Promise<PackageActionResult>;
       pickWhisperBinary: () => Promise<{
         canceled: boolean;
         path: string | null;
@@ -42,4 +51,25 @@ declare global {
       }>;
     };
   }
+
+  type PackageArtifact = {
+    name: string;
+    path: string;
+    sizeBytes: number;
+    modifiedAt: string;
+  };
+
+  type PackageStatusResult = {
+    running: boolean;
+    action: string | null;
+    startedAt: string | null;
+    logsPath: string;
+    releaseDir: string;
+    artifacts: PackageArtifact[];
+  };
+
+  type PackageActionResult = PackageStatusResult & {
+    ok: boolean;
+    message: string;
+  };
 }
