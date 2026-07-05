@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { getSettings, type SettingsRecord } from "../api/settings";
 import { getVoiceStatus, type VoiceEngineStatusRecord, type VoiceStatusRecord } from "../api/system";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -96,12 +97,12 @@ function getSttReadiness(voiceStatus: VoiceStatusRecord | null) {
     return { label: "missing", tone: "ghost" as const };
   }
 
-  const hasBinary = Boolean(voiceStatus.whisper_cpp_binary);
-  const hasModel = Boolean(voiceStatus.whisper_model_path);
-  if (hasBinary && hasModel) {
+  if (voiceStatus.stt_ready) {
     return { label: "ready", tone: "success" as const };
   }
-  if (hasBinary || hasModel) {
+
+  const hasConfiguredPath = Boolean(voiceStatus.whisper_cpp_binary || voiceStatus.whisper_model_path);
+  if (hasConfiguredPath) {
     return { label: "partial", tone: "warning" as const };
   }
   return { label: "missing", tone: "error" as const };
@@ -113,7 +114,7 @@ function getTtsReadiness(voiceStatus: VoiceStatusRecord | null) {
   }
 
   const piper = findEngine(voiceStatus, "piper");
-  if (piper?.available) {
+  if (voiceStatus.tts_ready || piper?.available) {
     return { label: "ready", tone: "success" as const };
   }
   if (piper?.configured || voiceStatus.piper_binary || voiceStatus.piper_model_path || voiceStatus.tts_engine === "piper") {
@@ -150,6 +151,17 @@ function StatRow({ label, value }: { label: string; value: string | number | nul
       <p className="mt-2 break-all text-sm text-base-content/80">{value ?? "Not available"}</p>
     </div>
   );
+}
+
+function getCompletionMessage(action: LocalAiActionId, fallback: string) {
+  if (action === "setup-local-ai") {
+    return "Setup All Local AI completed successfully. Whisper/Piper status has been refreshed.";
+  }
+  if (action === "check-local-ai") {
+    return "Check All Local AI completed successfully. Local AI readiness has been refreshed.";
+  }
+
+  return fallback;
 }
 
 export function LocalAiSetupPage() {
@@ -236,10 +248,13 @@ export function LocalAiSetupPage() {
 
   useEffect(() => {
     if (wasRunningRef.current && !isRunning) {
+      if (localAiStatus?.status === "succeeded" && localAiStatus.action) {
+        setLocalAiMessage(getCompletionMessage(localAiStatus.action, localAiStatus.message));
+      }
       void refreshAll();
     }
     wasRunningRef.current = isRunning;
-  }, [isRunning, refreshAll]);
+  }, [isRunning, localAiStatus, refreshAll]);
 
   const runSetupAction = async (action: SetupAction) => {
     const localAi = getDesktopLocalAi();
@@ -265,7 +280,7 @@ export function LocalAiSetupPage() {
     setLocalAiStatus(result);
     setLogTail(result.lastLines);
     if (result.ok) {
-      setLocalAiMessage(result.message);
+      setLocalAiMessage(getCompletionMessage(action, result.message));
     } else {
       setLocalAiError(result.message);
     }
@@ -284,7 +299,7 @@ export function LocalAiSetupPage() {
     setLocalAiStatus(result);
     setLogTail(result.lastLines);
     if (result.ok) {
-      setLocalAiMessage(result.message);
+      setLocalAiMessage(getCompletionMessage(action, result.message));
     } else {
       setLocalAiError(result.message);
     }
@@ -379,7 +394,7 @@ export function LocalAiSetupPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">STT Readiness</p>
-                  <p className="mt-1 text-sm text-base-content/60">{voiceStatus?.stt_engine || "Whisper status is not available yet."}</p>
+                  <p className="mt-1 text-sm text-base-content/60">{voiceStatus?.stt_message || voiceStatus?.stt_engine || "Whisper status is not available yet."}</p>
                 </div>
                 <span className={badgeClass(sttReadiness.tone)}>{sttReadiness.label}</span>
               </div>
@@ -389,7 +404,7 @@ export function LocalAiSetupPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">TTS Readiness</p>
-                  <p className="mt-1 text-sm text-base-content/60">{piperStatus?.message || voiceStatus?.message || "Piper status is not available yet."}</p>
+                  <p className="mt-1 text-sm text-base-content/60">{voiceStatus?.tts_message || piperStatus?.message || voiceStatus?.message || "Piper status is not available yet."}</p>
                 </div>
                 <span className={badgeClass(ttsReadiness.tone)}>{ttsReadiness.label}</span>
               </div>
@@ -465,6 +480,12 @@ export function LocalAiSetupPage() {
                 </button>
               </div>
               {copyMessage ? <p className="text-sm text-success">{copyMessage}</p> : null}
+
+              <div className="divider my-1" />
+              <div className="flex flex-wrap gap-2">
+                <Link to="/voice-lab" className="btn btn-outline btn-sm">Open Voice Lab</Link>
+                <Link to="/settings" className="btn btn-outline btn-sm">Open Settings</Link>
+              </div>
             </div>
           </div>
         </div>

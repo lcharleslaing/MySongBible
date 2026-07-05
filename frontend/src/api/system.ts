@@ -7,7 +7,11 @@ export type BackendHealthRecord = {
 export type VoiceStatusRecord = {
   status: string;
   stt_engine: string;
+  stt_ready: boolean;
+  stt_message: string;
   tts_engine: string;
+  tts_ready: boolean;
+  tts_message: string;
   default_engine: string;
   engines: VoiceEngineStatusRecord[];
   whisper_cpp_binary: string | null;

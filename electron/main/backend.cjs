@@ -27,6 +27,20 @@ function appendLog(logPath, message) {
   fs.appendFileSync(logPath, message, "utf-8");
 }
 
+async function checkBackendHealth(healthUrl) {
+  try {
+    const response = await fetch(healthUrl);
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = await response.json();
+    return payload?.status === "ok" && payload?.app_name === "AppTemplateBase Backend";
+  } catch {
+    return false;
+  }
+}
+
 function startBackendProcess({ app, isDev }) {
   const disabled = process.env.APP_DISABLE_BACKEND === "1";
   const logsDir = app.getPath("logs");
@@ -62,6 +76,7 @@ function startBackendProcess({ app, isDev }) {
   };
 
   appendLog(electronLogPath, `${new Date().toISOString()} Starting backend from ${backendDir} on ${baseUrl}.\n`);
+  let portConflictChecked = false;
 
   const child = spawn(
     pythonBinary,
@@ -83,6 +98,17 @@ function startBackendProcess({ app, isDev }) {
     const message = `[backend] ${chunk}`;
     process.stderr.write(message);
     appendLog(backendLogPath, message);
+
+    if (!portConflictChecked && (message.includes("address already in use") || message.includes("EADDRINUSE"))) {
+      portConflictChecked = true;
+      void checkBackendHealth(process.env.ELECTRON_BACKEND_HEALTH_URL || `${baseUrl}/api/health`).then((isHealthy) => {
+        const note = isHealthy
+          ? `Port ${port} is already in use; reusing existing backend because ${baseUrl}/api/health matches this app.`
+          : `Port ${port} is already in use and ${baseUrl}/api/health did not match this app. This looks like a backend port conflict.`;
+        console.warn(note);
+        appendLog(electronLogPath, `${new Date().toISOString()} ${note}\n`);
+      });
+    }
   });
 
   child.on("error", (error) => {
