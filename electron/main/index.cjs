@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require("electron");
 
 const { registerDesktopIpc } = require("./ipc.cjs");
 const { startBackendProcess, stopBackendProcess } = require("./backend.cjs");
@@ -29,28 +29,46 @@ function adjustWindowZoom(window, delta) {
   window.webContents.setZoomFactor(clampZoomFactor(Number((currentZoom + delta).toFixed(2))));
 }
 
-function exitFullScreenToMaximizedWindow(window) {
-  if (!window.isFullScreen()) {
+function getWindowDisplayBounds(window) {
+  const display = screen.getDisplayMatching(window.getBounds()) || screen.getPrimaryDisplay();
+  return display.workArea;
+}
+
+function fitWindowToDisplay(window) {
+  if (window.isDestroyed()) {
     return;
   }
 
-  window.once("leave-full-screen", () => {
-    if (!window.isDestroyed()) {
-      window.maximize();
-    }
-  });
+  const bounds = getWindowDisplayBounds(window);
+  window.setMinimumSize(Math.min(1100, bounds.width), Math.min(720, bounds.height));
+  window.setBounds(bounds, true);
+  window.maximize();
+  window.focus();
+}
+
+function exitFullScreenToDisplayWindow(window) {
+  if (!window.isFullScreen()) {
+    fitWindowToDisplay(window);
+    return;
+  }
+
   window.setFullScreen(false);
 }
 
 function createMainWindow() {
   const preloadPath = path.join(__dirname, "..", "preload", "index.cjs");
+  const initialBounds = screen.getPrimaryDisplay().workArea;
+  const minWidth = Math.min(1100, initialBounds.width);
+  const minHeight = Math.min(720, initialBounds.height);
 
   const window = new BrowserWindow({
-    width: 1440,
-    height: 920,
-    minWidth: 1100,
-    minHeight: 720,
-    fullscreen: true,
+    x: initialBounds.x,
+    y: initialBounds.y,
+    width: initialBounds.width,
+    height: initialBounds.height,
+    minWidth,
+    minHeight,
+    fullscreen: false,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#f3f6ef",
@@ -66,6 +84,10 @@ function createMainWindow() {
   window.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  window.on("leave-full-screen", () => {
+    setTimeout(() => fitWindowToDisplay(window), 50);
   });
 
   window.webContents.on("before-input-event", (event, input) => {
@@ -87,13 +109,15 @@ function createMainWindow() {
     } else if (input.key === "F11") {
       window.setFullScreen(!window.isFullScreen());
       event.preventDefault();
-    } else if (input.key === "Escape" && window.isFullScreen()) {
-      exitFullScreenToMaximizedWindow(window);
+    } else if (["Escape", "Esc"].includes(input.key)) {
+      exitFullScreenToDisplayWindow(window);
       event.preventDefault();
     }
   });
 
   window.once("ready-to-show", () => {
+    fitWindowToDisplay(window);
+    window.setFullScreen(true);
     window.show();
   });
 
