@@ -1,8 +1,8 @@
 # Local TTS Integration
 
-AppTemplateBase uses a pluggable, local-only text-to-speech architecture. The template works out of the box with Mock TTS, and it can be moved to real local Piper TTS after you manually install Piper and download a Piper voice model.
+AppTemplateBase uses a pluggable, local-only text-to-speech architecture. The template works out of the box with Mock TTS, and it can be moved to real local Piper TTS after you configure Piper and download a Piper voice model.
 
-The app does not install Piper automatically and does not download voice models automatically.
+The backend Python dependencies include the `piper-tts` package, which provides a local `piper` CLI in the backend virtualenv. The app does not download Piper voice models automatically.
 
 ## TTS Engines
 
@@ -22,13 +22,13 @@ Use Mock when you are developing the app shell or when Piper has not been instal
 
 Piper is the current real local text-to-speech engine.
 
-- runs locally through a configured Piper binary
+- runs locally through a configured Piper binary, usually `backend/.venv/bin/piper` when backend dependencies are installed
 - requires a downloaded Piper voice model file ending in `.onnx`
 - writes WAV output to the configured TTS output directory
 - is selected with `TTS_ENGINE=piper` or through Settings
 - fails clearly when its binary or model path is missing
 
-Piper must be configured manually in either `backend/.env` or the Settings page. The template will not guess Piper paths, install the binary, or download models.
+Piper must be configured manually in either `backend/.env` or the Settings page. The template will not guess voice model paths or download models.
 
 ### Future Voice Cloning Engines
 
@@ -52,7 +52,7 @@ Piper example:
 
 ```env
 TTS_ENGINE=piper
-PIPER_BINARY=/path/to/piper
+PIPER_BINARY=/home/llaing/Programming/AppTemplateBase/backend/.venv/bin/piper
 PIPER_MODEL_PATH=/path/to/voice-model.onnx
 TTS_OUTPUT_DIR=backend/data/audio/tts
 TTS_TIMEOUT_SECONDS=60
@@ -62,17 +62,16 @@ These values are read from `backend/.env`. Relative paths in backend settings ar
 
 ## Recommended Local Folder Convention
 
-You can keep local AI tools outside the repository. This is only a convention, not a requirement:
+You can keep local AI voice models outside the repository. This is only a convention, not a requirement:
 
 ```text
-~/local-ai/piper/
 ~/local-ai/piper/models/
 ```
 
 Example paths might then look like:
 
 ```env
-PIPER_BINARY=/home/llaing/local-ai/piper/piper
+PIPER_BINARY=/home/llaing/Programming/AppTemplateBase/backend/.venv/bin/piper
 PIPER_MODEL_PATH=/home/llaing/local-ai/piper/models/en_US-lessac-medium.onnx
 ```
 
@@ -189,7 +188,7 @@ Response includes:
 
 ### Piper binary missing
 
-`PIPER_BINARY` is blank or points to a path that does not exist. Install Piper manually or switch back to Mock.
+`PIPER_BINARY` is blank or points to a path that does not exist. If backend dependencies are installed, the expected local CLI is usually `backend/.venv/bin/piper`. Otherwise, run the normal project dependency setup or switch back to Mock.
 
 ### Piper binary not executable
 
