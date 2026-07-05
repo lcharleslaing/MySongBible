@@ -62,6 +62,25 @@ Console messages use:
 - `WARN` for a non-blocking condition, such as `TTS_ENGINE=mock` or blank Piper paths while Mock is active
 - `FAIL` for a blocking Piper configuration or synthesis problem
 
+## Manual Voice Lab Test
+
+Use this flow to verify the renderer and backend TTS path together:
+
+1. Start the app with `npm start`.
+2. Open Voice Lab.
+3. In Text to Speech, select `Mock`.
+4. Enter text and click `Speak`.
+5. Confirm the synthesis result shows a completed job, the `mock` engine, a local output path, and a backend playback URL.
+6. Confirm the Audio Output panel uses the backend URL and shows an audio player when the URL is available.
+7. Configure Piper paths in Settings or `backend/.env`:
+   - `TTS_ENGINE=piper`
+   - `PIPER_BINARY=/absolute/path/to/piper`
+   - `PIPER_MODEL_PATH=/absolute/path/to/piper-model.onnx`
+8. Run `npm run tts:check` from the repository root.
+9. Return to Voice Lab and select `Piper`.
+10. Click `Speak`.
+11. Confirm the synthesis result shows the `piper` engine and the real audio plays through the backend HTTP playback URL.
+
 ## Output Storage
 
 - synthesized audio is saved under `data/audio/tts` by default

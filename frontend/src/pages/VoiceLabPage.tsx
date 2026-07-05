@@ -40,6 +40,14 @@ function downloadBlob(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+function formatEngineOptionLabel(engine: VoiceEngineStatusRecord) {
+  if (engine.id === "piper") {
+    return `${engine.label} - ${engine.available ? "ready" : "not configured"}`;
+  }
+
+  return `${engine.label} - ${engine.available ? "ready" : "unavailable"}`;
+}
+
 async function copyTextToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -324,6 +332,7 @@ export function VoiceLabPage() {
   }, [ttsEngine, ttsEngines]);
 
   const selectedEngineSupportsProfiles = Boolean(selectedTtsEngine?.supports_voice_profiles);
+  const canRunSelectedTtsEngine = !selectedTtsEngine || selectedTtsEngine.available;
 
   const handleTtsEngineChange = (engineId: string) => {
     const nextEngine = ttsEngines.find((engine) => engine.id === engineId) || null;
@@ -349,6 +358,7 @@ export function VoiceLabPage() {
     setIsSynthesizing(true);
     setTtsError("");
     setTtsSuccessMessage("");
+    setTtsResult(null);
 
     try {
       const result = await synthesizeSpeech({
@@ -359,21 +369,37 @@ export function VoiceLabPage() {
       setTtsResult(result);
       setTtsSuccessMessage("Speech synthesis completed successfully.");
     } catch (error) {
+      let message = "Speech synthesis failed.";
+      let failedJobId = 0;
+
       if (error instanceof ApiError) {
         const details = error.details as
-          | { detail?: string | { message?: string } }
+          | { detail?: string | { message?: string; job_id?: number; status?: string } }
           | null
           | undefined;
-        const message =
+        message =
           typeof details?.detail === "object"
             ? details.detail?.message || error.message
             : typeof details?.detail === "string"
               ? details.detail
               : error.message;
-        setTtsError(message || "Speech synthesis failed.");
+
+        if (typeof details?.detail === "object" && typeof details.detail?.job_id === "number") {
+          failedJobId = details.detail.job_id;
+        }
       } else {
-        setTtsError(error instanceof Error ? error.message : "Speech synthesis failed.");
+        message = error instanceof Error ? error.message : "Speech synthesis failed.";
       }
+
+      setTtsError(message || "Speech synthesis failed.");
+      setTtsResult({
+        job_id: failedJobId,
+        audio_file_path: null,
+        audio_file_url: null,
+        engine_used: selectedTtsEngine?.id || ttsEngine || "unknown",
+        status: "failed",
+        error: message || "Speech synthesis failed.",
+      });
     } finally {
       setIsSynthesizing(false);
     }
@@ -571,10 +597,34 @@ export function VoiceLabPage() {
           <div className="card-body gap-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="card-title">Text to Speech</h2>
-              <span className={`badge ${isSynthesizing ? "badge-warning" : ttsResult ? "badge-success" : "badge-outline"}`}>
-                {isSynthesizing ? "Synthesizing" : ttsResult ? "Ready" : "Idle"}
+              <span className={`badge ${isSynthesizing ? "badge-warning" : ttsResult?.status === "failed" ? "badge-error" : ttsResult ? "badge-success" : "badge-outline"}`}>
+                {isSynthesizing ? "Synthesizing" : ttsResult?.status === "failed" ? "Failed" : ttsResult ? "Ready" : "Idle"}
               </span>
             </div>
+
+            {ttsEngines.length > 0 ? (
+              <div className="rounded-box border border-base-300 bg-base-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/60">Engine Readiness</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {ttsEngines.map((engine) => (
+                    <div key={engine.id} className="flex items-start justify-between gap-3 rounded-box bg-base-100 p-3">
+                      <div>
+                        <p className="text-sm font-medium">{engine.label}</p>
+                        <p className="mt-1 text-xs text-base-content/60">{engine.message}</p>
+                      </div>
+                      <span className={`badge shrink-0 ${engine.available ? "badge-success" : "badge-warning"}`}>
+                        {engine.available ? "ready" : "not configured"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : isLoadingVoiceStatus ? (
+              <div className="alert">
+                <span className="loading loading-spinner loading-sm" />
+                <span className="text-sm">Loading TTS engine status...</span>
+              </div>
+            ) : null}
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="form-control gap-2">
@@ -588,8 +638,7 @@ export function VoiceLabPage() {
                   {ttsEngines.length > 0 ? (
                     ttsEngines.map((engine) => (
                       <option key={engine.id} value={engine.id} disabled={!engine.available}>
-                        {engine.label}
-                        {engine.id === "piper" ? (engine.available ? " - ready" : " - not configured") : ""}
+                        {formatEngineOptionLabel(engine)}
                       </option>
                     ))
                   ) : (
@@ -601,10 +650,13 @@ export function VoiceLabPage() {
                     {selectedTtsEngine.message}
                   </span>
                 ) : null}
+                {selectedTtsEngine && !selectedTtsEngine.available ? (
+                  <span className="label-text-alt text-warning">This engine cannot synthesize until it is configured in Settings.</span>
+                ) : null}
               </label>
 
               <label className="form-control gap-2">
-                <span className="label-text font-medium">Voice Profile</span>
+                <span className="label-text font-medium">Voice Profile (future voice-cloning)</span>
                 <input
                   type="text"
                   className="input input-bordered"
@@ -615,7 +667,7 @@ export function VoiceLabPage() {
                 />
                 {!selectedEngineSupportsProfiles ? (
                   <span className="label-text-alt text-base-content/60">
-                    Voice profiles are disabled for this engine. Future voice-cloning engines can enable them.
+                    Mock and Piper do not support voice profiles yet, so this value is not sent during synthesis.
                   </span>
                 ) : null}
               </label>
@@ -648,7 +700,7 @@ export function VoiceLabPage() {
               <button
                 type="button"
                 className={`btn btn-secondary ${isSynthesizing ? "loading" : ""}`}
-                disabled={!ttsText.trim() || isSynthesizing || isLoadingVoiceStatus || Boolean(selectedTtsEngine && !selectedTtsEngine.available)}
+                disabled={!ttsText.trim() || isSynthesizing || isLoadingVoiceStatus || !canRunSelectedTtsEngine}
                 onClick={sendForSynthesis}
               >
                 Speak
@@ -666,11 +718,27 @@ export function VoiceLabPage() {
                 ) : ttsResult ? (
                   <div className="mt-4 space-y-3">
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="badge badge-outline">Job #{ttsResult.job_id}</span>
-                      <span className="badge badge-outline">{ttsResult.engine_used}</span>
-                      <span className="badge badge-outline">{ttsResult.status}</span>
+                      {ttsResult.job_id ? <span className="badge badge-outline">Job #{ttsResult.job_id}</span> : null}
+                      <span className="badge badge-outline">Engine: {ttsResult.engine_used}</span>
+                      <span className={`badge ${ttsResult.status === "failed" ? "badge-error" : "badge-outline"}`}>Status: {ttsResult.status}</span>
                     </div>
-                    <p className="text-sm text-base-content/70 break-all">{ttsOutputPath}</p>
+                    {ttsOutputPath ? (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/60">Local Output Path</p>
+                        <p className="mt-1 break-all text-sm text-base-content/70">{ttsOutputPath}</p>
+                      </div>
+                    ) : null}
+                    {ttsResult.audio_file_url ? (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/60">Playable URL</p>
+                        <p className="mt-1 break-all text-sm text-base-content/70">{ttsResult.audio_file_url}</p>
+                      </div>
+                    ) : null}
+                    {ttsResult.error ? (
+                      <div className="alert alert-error">
+                        <span className="text-sm">{ttsResult.error}</span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-base-content/50">
@@ -692,11 +760,13 @@ export function VoiceLabPage() {
                   </div>
                 ) : ttsResult ? (
                   <p className="mt-4 text-sm text-base-content/50">
-                    A TTS result was returned, but no direct preview URL is available in this renderer context.
+                    {ttsResult.status === "failed"
+                      ? "Synthesis failed, so there is no playable audio URL."
+                      : "A TTS result was returned, but no backend playback URL is available."}
                   </p>
                 ) : (
                   <p className="mt-4 text-sm text-base-content/50">
-                    Synthesized audio will appear here when a playable output URL or local file path is available.
+                    Synthesized audio will appear here when the backend returns an HTTP playback URL.
                   </p>
                 )}
               </div>
