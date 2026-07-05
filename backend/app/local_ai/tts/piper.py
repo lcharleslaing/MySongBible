@@ -43,9 +43,9 @@ class PiperEngine(BaseTtsEngine):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = [
             str(binary_path),
-            "--model",
+            "-m",
             str(model_path),
-            "--output_file",
+            "-f",
             str(output_path),
         ]
 

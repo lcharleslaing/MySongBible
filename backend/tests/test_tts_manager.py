@@ -65,7 +65,15 @@ def test_piper_engine_runs_safe_subprocess(tmp_path: Path, monkeypatch: pytest.M
     assert result.audio_file_path == output_path
     assert captured["input"] == "hello"
     assert captured["timeout"] == 120
-    assert "--output_file" in captured["command"]
+    assert captured["command"] == [
+        str(binary_path),
+        "-m",
+        str(model_path),
+        "-f",
+        str(output_path),
+    ]
+    assert "--model" not in captured["command"]
+    assert "--output_file" not in captured["command"]
 
 
 def test_piper_engine_timeout_returns_structured_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

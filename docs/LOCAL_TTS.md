@@ -101,6 +101,14 @@ This is a local Piper text to speech test.
 
 The output is written to `piper-test.wav` inside the configured `TTS_OUTPUT_DIR`. The helper may overwrite that known test file, but it does not write to arbitrary user-selected files.
 
+For Piper 1.4.2 from OHF-Voice, the direct CLI shape is:
+
+```bash
+echo "This is a test." | backend/.venv/bin/python -m piper -m /path/to/model.onnx -f /tmp/test.wav
+```
+
+The backend uses the same argument style: `-m <model_path>` and `-f <output_wav_path>`.
+
 Console messages mean:
 
 - `PASS`: a setting is valid, a path exists, or test synthesis succeeded

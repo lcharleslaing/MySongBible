@@ -98,7 +98,7 @@ function runPiper({ binaryPath, modelPath, outputPath, timeoutSeconds }) {
   return new Promise((resolve) => {
     const child = spawn(
       binaryPath,
-      ["--model", modelPath, "--output_file", outputPath],
+      ["-m", modelPath, "-f", outputPath],
       {
         shell: false,
         stdio: ["pipe", "pipe", "pipe"],
