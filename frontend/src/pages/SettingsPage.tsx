@@ -90,7 +90,6 @@ function buildPayload(formState: FormState): SettingsUpdatePayload {
     tts_engine: formState.ttsEngine,
     piper_binary: formState.piperBinaryPath.trim() || null,
     piper_model_path: formState.piperModelPath.trim() || null,
-    sqlite_database_path: formState.sqliteDatabasePath.trim(),
     audio_input_dir: formState.audioInputDirectory.trim(),
     tts_output_dir: formState.audioOutputDirectory.trim(),
   };

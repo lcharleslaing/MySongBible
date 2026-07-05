@@ -1,5 +1,6 @@
 from pathlib import Path
 import shutil
+from subprocess import run
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -38,7 +39,12 @@ class SttService:
         language: str | None = None,
     ):
         destination_path = self._save_upload(upload_file)
-        transcription = self.transcriber.transcribe(destination_path, language=language)
+        transcription_audio_path = self._prepare_transcription_audio(destination_path)
+        try:
+            transcription = self.transcriber.transcribe(transcription_audio_path, language=language)
+        finally:
+            if transcription_audio_path != destination_path:
+                transcription_audio_path.unlink(missing_ok=True)
 
         original_name = Path(upload_file.filename or destination_path.name).name
         transcript = TranscriptService(self.session).create_transcript(
@@ -81,6 +87,48 @@ class SttService:
 
         upload_file.file.close()
         return destination_path
+
+    def _prepare_transcription_audio(self, audio_file_path: Path) -> Path:
+        if audio_file_path.suffix.lower() != ".webm":
+            return audio_file_path
+
+        return self._convert_webm_to_wav(audio_file_path)
+
+    def _convert_webm_to_wav(self, audio_file_path: Path) -> Path:
+        ffmpeg_path = shutil.which("ffmpeg")
+        if not ffmpeg_path:
+            raise SttUploadError(
+                "Recorded WebM audio requires ffmpeg for conversion before whisper.cpp transcription.",
+                status_code=503,
+            )
+
+        converted_path = audio_file_path.with_name(f"{audio_file_path.stem}_whisper.wav")
+        completed = run(
+            [
+                ffmpeg_path,
+                "-y",
+                "-i",
+                str(audio_file_path),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-vn",
+                str(converted_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if completed.returncode != 0:
+            converted_path.unlink(missing_ok=True)
+            raise SttUploadError(
+                "Could not convert recorded WebM audio to WAV for transcription.",
+                status_code=502,
+            )
+
+        return converted_path
 
     def _validate_upload_metadata(self, upload_file: UploadFile) -> None:
         filename = upload_file.filename or ""

@@ -77,11 +77,11 @@ The backend validates file existence and returns clear API errors when configura
 
 ## Recorded Audio Does Not Transcribe
 
-Electron/Chromium recording commonly produces `webm` or `ogg`, not MP3. If your local `whisper.cpp` flow rejects the recording:
+Electron/Chromium recording commonly produces `webm` or `ogg`, not MP3. The backend converts recorded `webm` audio to WAV with `ffmpeg` before invoking `whisper.cpp`. If your local transcription flow still rejects the recording:
 
 - try uploading a known-good `.wav` or `.mp3` file manually
 - keep the recorded file for inspection
-- add a future conversion step if your target machine needs stricter audio normalization
+- confirm `ffmpeg` is installed and available on `PATH`
 
 Current template behavior is file-based, not live streaming.
 

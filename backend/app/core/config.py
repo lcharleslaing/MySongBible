@@ -1,8 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -12,7 +13,7 @@ class Settings(BaseSettings):
 
     backend_host: str = "127.0.0.1"
     backend_port: int = 8000
-    cors_origins: list[str] = Field(
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
@@ -40,11 +41,11 @@ class Settings(BaseSettings):
     audio_input_dir_override: Path | None = Field(default=None, validation_alias=AliasChoices("AUDIO_INPUT_DIR"))
     keep_uploaded_audio_files: bool = True
     max_upload_size_bytes: int = 50 * 1024 * 1024
-    allowed_audio_extensions: list[str] = Field(
-        default_factory=lambda: ["wav", "mp3", "ogg", "flac", "m4a"],
+    allowed_audio_extensions: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["wav", "mp3", "ogg", "flac", "m4a", "webm"],
         validation_alias=AliasChoices("ALLOWED_AUDIO_EXTENSIONS"),
     )
-    allowed_audio_mime_types: list[str] = Field(
+    allowed_audio_mime_types: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "audio/wav",
             "audio/x-wav",
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
             "audio/x-flac",
             "audio/mp4",
             "audio/m4a",
+            "audio/webm",
         ],
         validation_alias=AliasChoices("ALLOWED_AUDIO_MIME_TYPES"),
     )

@@ -29,7 +29,6 @@ export type SettingsUpdatePayload = {
   piper_model_path: string | null;
   audio_input_dir: string;
   tts_output_dir: string;
-  sqlite_database_path: string;
 };
 
 export async function getSettings() {

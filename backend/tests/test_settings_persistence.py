@@ -43,6 +43,31 @@ def test_settings_can_be_updated_and_reloaded(client) -> None:
     assert reloaded["tts_output_dir"] == "/tmp/audio-output"
 
 
+def test_settings_can_update_editable_paths_without_database_path(client) -> None:
+    update_response = client.put(
+        "/api/settings",
+        json={
+            "whisper_cpp_binary": "/tmp/selected-whisper-cli",
+            "whisper_model_path": "/tmp/selected-model.bin",
+            "whisper_thread_count": 8,
+            "tts_engine": "mock",
+            "piper_binary": None,
+            "piper_model_path": None,
+            "audio_input_dir": "/tmp/selected-audio-input",
+            "tts_output_dir": "/tmp/selected-audio-output",
+        },
+    )
+
+    assert update_response.status_code == 200
+
+    payload = update_response.json()
+    assert payload["whisper_cpp_binary"] == "/tmp/selected-whisper-cli"
+    assert payload["whisper_model_path"] == "/tmp/selected-model.bin"
+    assert payload["whisper_thread_count"] == 8
+    assert payload["audio_input_dir"] == "/tmp/selected-audio-input"
+    assert payload["tts_output_dir"] == "/tmp/selected-audio-output"
+
+
 def test_settings_reject_runtime_database_path_change(client) -> None:
     response = client.put(
         "/api/settings",

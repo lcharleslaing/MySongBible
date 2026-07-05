@@ -65,8 +65,8 @@ class SettingsService:
         )
 
     def update_settings(self, payload: SettingsUpdateRequest) -> PublicSettingsResponse:
-        requested_database_url = self._sqlite_url_from_path(payload.sqlite_database_path)
-        if requested_database_url != self.base_settings.database_url:
+        requested_database_url = self._sqlite_url_from_path(payload.sqlite_database_path) if payload.sqlite_database_path else None
+        if requested_database_url and requested_database_url != self.base_settings.database_url:
             raise StartupOnlySettingError(
                 "SQLite database path is startup-only. Update DATABASE_URL in the backend environment and restart the backend.",
             )

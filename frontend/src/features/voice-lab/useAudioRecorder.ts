@@ -57,8 +57,7 @@ export function useAudioRecorder() {
       return "";
     }
 
-    // TODO: Add client-side or backend audio conversion when the recorder falls back to webm.
-    return "Recorder fallback is using audio/webm. whisper.cpp may reject this format directly; MP3 remains available by choosing a local file instead.";
+    return "Recorder fallback is using audio/webm. The backend will convert the recording to WAV before sending it to whisper.cpp.";
   }, [mimeType]);
 
   const startRecording = async () => {

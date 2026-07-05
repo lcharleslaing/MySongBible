@@ -30,4 +30,4 @@ class SettingsUpdateRequest(BaseModel):
     piper_model_path: str | None = None
     audio_input_dir: str = Field(min_length=1)
     tts_output_dir: str = Field(min_length=1)
-    sqlite_database_path: str = Field(min_length=1)
+    sqlite_database_path: str | None = Field(default=None, min_length=1)
