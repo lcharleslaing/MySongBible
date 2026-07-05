@@ -91,7 +91,7 @@ npm run template:init
 TEMPLATE_INIT_FORCE=1 npm start
 ```
 
-Edit `backend/.env` manually if you want different Whisper or Piper paths. `npm run tts:check` can verify Piper configuration, but it does not install Piper or download voice models.
+Edit `backend/.env` manually if you want different Whisper or Piper paths. `npm run tts:check` can verify Piper configuration, but it does not install Piper or download voice models. See [docs/LOCAL_TTS.md](docs/LOCAL_TTS.md) for the Mock-to-Piper setup flow.
 
 ## Local-Only Expectations
 
