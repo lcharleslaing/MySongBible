@@ -1,6 +1,29 @@
+import { useEffect, useState } from "react";
+
 import { ThemeSelector } from "../theme/ThemeSelector";
 
+function formatClock(value: Date) {
+  const date = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(value);
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+
+  return `${date} @ ${time}`;
+}
+
 export function Topbar() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
     <header className="navbar border-b border-base-300 bg-base-100 px-4 sm:px-6">
       <div className="flex-1 gap-3">
@@ -14,7 +37,10 @@ export function Topbar() {
           <h2 className="text-lg font-semibold text-base-content">Frontend Starter</h2>
         </div>
       </div>
-      <div className="flex-none">
+      <div className="flex flex-none items-center gap-3">
+        <div className="hidden whitespace-nowrap text-sm font-medium text-base-content/70 md:block">
+          {formatClock(now)}
+        </div>
         <ThemeSelector />
       </div>
     </header>

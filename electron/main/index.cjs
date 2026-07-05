@@ -29,6 +29,19 @@ function adjustWindowZoom(window, delta) {
   window.webContents.setZoomFactor(clampZoomFactor(Number((currentZoom + delta).toFixed(2))));
 }
 
+function exitFullScreenToMaximizedWindow(window) {
+  if (!window.isFullScreen()) {
+    return;
+  }
+
+  window.once("leave-full-screen", () => {
+    if (!window.isDestroyed()) {
+      window.maximize();
+    }
+  });
+  window.setFullScreen(false);
+}
+
 function createMainWindow() {
   const preloadPath = path.join(__dirname, "..", "preload", "index.cjs");
 
@@ -75,7 +88,7 @@ function createMainWindow() {
       window.setFullScreen(!window.isFullScreen());
       event.preventDefault();
     } else if (input.key === "Escape" && window.isFullScreen()) {
-      window.setFullScreen(false);
+      exitFullScreenToMaximizedWindow(window);
       event.preventDefault();
     }
   });
