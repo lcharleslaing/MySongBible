@@ -14,6 +14,53 @@ type AudioSource = {
   previewUrl: string;
 };
 
+function safeFileName(value: string, fallback: string) {
+  const cleaned = value
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+
+  return cleaned || fallback;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.append(textarea);
+  textarea.select();
+
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed.");
+  }
+}
+
 export function VoiceLabPage() {
   const {
     audioBlob: recordedAudioBlob,
@@ -33,6 +80,8 @@ export function VoiceLabPage() {
   const [transcriptRecord, setTranscriptRecord] = useState<TranscriptRecord | null>(null);
   const [transcriptionError, setTranscriptionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [audioExportMessage, setAudioExportMessage] = useState("");
+  const [transcriptExportMessage, setTranscriptExportMessage] = useState("");
   const [ttsText, setTtsText] = useState("This is a starter interface for future local text-to-speech testing.");
   const [ttsEngine, setTtsEngine] = useState("mock");
   const [voiceProfile, setVoiceProfile] = useState("");
@@ -88,6 +137,7 @@ export function VoiceLabPage() {
     setSelectedAudioUrl(nextUrl);
     setTranscriptionError("");
     setSuccessMessage("");
+    setAudioExportMessage("");
   };
 
   const clearSelectedAudioFile = () => {
@@ -97,6 +147,17 @@ export function VoiceLabPage() {
 
     setSelectedAudioFile(null);
     setSelectedAudioUrl("");
+    setAudioExportMessage("");
+  };
+
+  const saveActiveAudio = () => {
+    if (!activeAudioSource) {
+      setAudioExportMessage("Record audio or choose an audio file before saving.");
+      return;
+    }
+
+    downloadBlob(activeAudioSource.blob, safeFileName(activeAudioSource.fileName, "voice-lab-audio.webm"));
+    setAudioExportMessage("Audio save started.");
   };
 
   const sendForTranscription = async () => {
@@ -109,6 +170,7 @@ export function VoiceLabPage() {
     setIsTranscribing(true);
     setTranscriptionError("");
     setSuccessMessage("");
+    setTranscriptExportMessage("");
 
     try {
       const result = await transcribeAudioRecording({
@@ -136,6 +198,44 @@ export function VoiceLabPage() {
       }
     } finally {
       setIsTranscribing(false);
+    }
+  };
+
+  const transcriptExportFileName = useMemo(() => {
+    if (!transcriptRecord) {
+      return "voice-lab-transcript.txt";
+    }
+
+    const sourceName = transcriptRecord.source_audio_name || transcriptRecord.title || `transcript-${transcriptRecord.id}`;
+    const withoutExtension = sourceName.replace(/\.[^.]+$/, "");
+    return `${safeFileName(withoutExtension, `transcript-${transcriptRecord.id}`)}.txt`;
+  }, [transcriptRecord]);
+
+  const saveTranscript = () => {
+    if (!transcriptRecord?.transcript_text.trim()) {
+      setTranscriptExportMessage("No transcript is available to save yet.");
+      return;
+    }
+
+    const transcriptBlob = new Blob([transcriptRecord.transcript_text.trimEnd(), "\n"], {
+      type: "text/plain;charset=utf-8",
+    });
+
+    downloadBlob(transcriptBlob, transcriptExportFileName);
+    setTranscriptExportMessage("Transcript save started.");
+  };
+
+  const copyTranscript = async () => {
+    if (!transcriptRecord?.transcript_text.trim()) {
+      setTranscriptExportMessage("No transcript is available to copy yet.");
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(transcriptRecord.transcript_text);
+      setTranscriptExportMessage("Transcript copied to clipboard.");
+    } catch (error) {
+      setTranscriptExportMessage(error instanceof Error ? error.message : "Could not copy transcript.");
     }
   };
 
@@ -283,7 +383,7 @@ export function VoiceLabPage() {
               <span className="label-text font-medium">Or choose a local audio file</span>
               <input
                 type="file"
-                accept=".mp3,.ogg,.wav,.flac,audio/mpeg,audio/ogg,audio/wav,audio/flac"
+                accept=".mp3,.ogg,.wav,.flac,.m4a,.webm,audio/mpeg,audio/ogg,audio/wav,audio/flac,audio/mp4,audio/m4a,audio/webm"
                 className="file-input file-input-bordered w-full"
                 onChange={handleAudioFileSelection}
                 disabled={isRecording || isTranscribing}
@@ -329,7 +429,17 @@ export function VoiceLabPage() {
 
             <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
               <div className="rounded-box border border-base-300 bg-base-200 p-4">
-                <p className="text-sm font-medium text-base-content/70">Audio Preview</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-base-content/70">Audio Preview</p>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-xs"
+                    disabled={!activeAudioSource}
+                    onClick={saveActiveAudio}
+                  >
+                    Save Audio
+                  </button>
+                </div>
                 {activeAudioSource ? (
                   <div className="mt-4 space-y-3">
                     <audio className="w-full" controls src={activeAudioSource.previewUrl}>
@@ -338,6 +448,9 @@ export function VoiceLabPage() {
                     <p className="text-xs text-base-content/60">
                       The selected audio source will be uploaded as a single file-based transcription request.
                     </p>
+                    {audioExportMessage ? (
+                      <p className="text-xs text-success">{audioExportMessage}</p>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-base-content/50">
@@ -347,7 +460,27 @@ export function VoiceLabPage() {
               </div>
 
               <div className="rounded-box min-h-56 border border-base-300 bg-base-200 p-4">
-                <p className="text-sm font-medium text-base-content/70">Transcript Output</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-base-content/70">Transcript Output</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      disabled={!transcriptRecord?.transcript_text.trim()}
+                      onClick={saveTranscript}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      disabled={!transcriptRecord?.transcript_text.trim()}
+                      onClick={copyTranscript}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
                 {isTranscribing ? (
                   <div className="mt-4 flex items-center gap-3 text-sm text-base-content/60">
                     <span className="loading loading-spinner loading-sm" />
@@ -365,6 +498,9 @@ export function VoiceLabPage() {
                     <div className="whitespace-pre-wrap text-sm text-base-content/80">
                       {transcriptRecord.transcript_text}
                     </div>
+                    {transcriptExportMessage ? (
+                      <p className="text-xs text-success">{transcriptExportMessage}</p>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-base-content/50">
