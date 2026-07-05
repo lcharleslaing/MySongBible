@@ -138,7 +138,7 @@ PIPER_MODEL_PATH=/absolute/path/to/piper-model.onnx
 
 No cloud STT or TTS assumptions are built into the template.
 
-`npm start` creates `backend/.env` when missing. On this development machine it also writes the local `whisper.cpp` binary path and chooses the first existing model in this order: tiny, base, then small. Tiny is preferred because it starts faster on slower laptops. Piper voice model paths are not guessed or downloaded; leave `TTS_ENGINE=mock` or configure Piper manually. See `docs/LOCAL_TTS.md` for Piper binary/model setup and `npm run tts:check`.
+`npm start` creates `backend/.env` when missing. On this development machine it also writes the local `whisper.cpp` binary path and chooses the first existing model in this order: tiny, base, then small. Tiny is preferred because it starts faster on slower laptops. For reusable local Whisper/Piper setup, run `npm run setup:local-ai`; it creates local AI folders under `~/local-ai`, downloads default models, and updates `backend/.env`. See [docs/LOCAL_AI_SETUP.md](docs/LOCAL_AI_SETUP.md) for the full setup flow and `docs/LOCAL_TTS.md` for TTS architecture details.
 
 ## 5. First-Run Commands
 
@@ -162,6 +162,7 @@ That bootstrap flow will:
 Use:
 
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- [docs/LOCAL_AI_SETUP.md](docs/LOCAL_AI_SETUP.md)
 - [docs/SMOKE_TEST_CHECKLIST.md](docs/SMOKE_TEST_CHECKLIST.md)
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 

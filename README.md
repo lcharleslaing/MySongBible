@@ -47,6 +47,11 @@ From the repository root:
 - `npm start` runs one-time template initialization, prepares `backend/.env`, bootstraps missing dependencies, then runs the full desktop app in development mode
 - `npm run start:bootstrap-only` performs first-run setup checks without launching the app
 - `npm run template:init` forces the template identity/default-path setup to run again
+- `npm run setup:local-ai` sets up local Whisper and Piper assets under `~/local-ai` and updates `backend/.env`
+- `npm run setup:whisper` sets up or verifies `whisper.cpp` and the selected Whisper model
+- `npm run setup:piper` creates a dedicated Piper virtualenv, wrapper, and default voice model
+- `npm run check:local-ai` validates STT, TTS, and backend health when available
+- `npm run stt:check` validates the configured Whisper binary/model
 - `npm run frontend:dev` runs the Vite renderer only
 - `npm run electron:dev` runs Electron against the Vite dev server
 - `npm run tts:check` validates the Piper paths in `backend/.env` and runs a short synthesis test when Piper is configured
@@ -91,7 +96,7 @@ npm run template:init
 TEMPLATE_INIT_FORCE=1 npm start
 ```
 
-Edit `backend/.env` manually if you want different Whisper or Piper paths. `npm run tts:check` can verify Piper configuration. Backend dependencies include the Piper CLI package, but voice models are not downloaded automatically. See [docs/LOCAL_TTS.md](docs/LOCAL_TTS.md) for the Mock-to-Piper setup flow.
+Edit `backend/.env` manually if you want different Whisper or Piper paths. For the reusable local setup flow, run `npm run setup:local-ai` or see [docs/LOCAL_AI_SETUP.md](docs/LOCAL_AI_SETUP.md). `npm run tts:check` can verify Piper configuration. Backend dependencies include the Piper CLI package, but the setup package keeps voice models outside the repo.
 
 ## Local-Only Expectations
 
@@ -100,6 +105,6 @@ Edit `backend/.env` manually if you want different Whisper or Piper paths. `npm 
 - Whisper, Piper, SQLite, and output paths must stay configurable.
 - Renderer filesystem access stays behind the Electron preload bridge.
 
-Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues.
+Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for app setup, [docs/LOCAL_AI_SETUP.md](docs/LOCAL_AI_SETUP.md) for local Whisper/Piper setup, and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues.
 
 If you are using this repository as a base for a new product, start with [TEMPLATE_USAGE.md](TEMPLATE_USAGE.md).

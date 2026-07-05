@@ -107,6 +107,8 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_paths(cls, value: object) -> object:
         if isinstance(value, str):
+            if value.startswith("backend/"):
+                return Path(__file__).resolve().parents[3] / value
             return Path(value)
         return value
 

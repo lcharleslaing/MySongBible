@@ -35,3 +35,9 @@ def test_settings_loads_csv_list_values_from_env_file(tmp_path) -> None:
     assert settings.cors_origins == ["http://localhost:5173", "http://127.0.0.1:5173", "file://", "null"]
     assert settings.allowed_audio_extensions == ["wav", "mp3", "m4a"]
     assert settings.allowed_audio_mime_types == ["audio/wav", "audio/mpeg", "audio/m4a"]
+
+
+def test_settings_resolves_repo_backend_relative_paths() -> None:
+    settings = Settings(tts_output_dir="backend/data/audio/tts")
+
+    assert str(settings.tts_output_dir).endswith("AppTemplateBase/backend/data/audio/tts")
