@@ -16,9 +16,9 @@ const cards = [
   },
   {
     title: "Voice Services",
-    value: "Partial",
-    tone: "info" as const,
-    detail: "whisper.cpp STT and pluggable local TTS are wired. Voice cloning remains scaffold-only.",
+    value: "Ready",
+    tone: "success" as const,
+    detail: "Local STT and TTS wiring is in place. Voice cloning remains future scaffold work and is not required for template health.",
   },
   {
     title: "Desktop Shell",
