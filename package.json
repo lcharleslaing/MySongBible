@@ -2,6 +2,12 @@
   "name": "apptemplatebase",
   "private": true,
   "version": "0.1.0",
+  "description": "Reusable local-first Electron, React, and FastAPI desktop starter.",
+  "desktopName": "apptemplatebase",
+  "author": {
+    "name": "Local Developer",
+    "email": "local@example.com"
+  },
   "main": "electron/main/index.cjs",
   "workspaces": [
     "frontend"
@@ -25,12 +31,59 @@
     "build": "npm run build:frontend",
     "build:frontend": "npm --prefix frontend run build",
     "typecheck": "npm --prefix frontend run typecheck",
-    "package": "npm run build:frontend && echo \"Packaging is not configured yet.\""
+    "icons:linux": "node scripts/package/generate-linux-icons.cjs",
+    "package": "npm run package:linux",
+    "package:linux": "npm run icons:linux && npm run build:frontend && electron-builder --linux deb AppImage",
+    "reinstall:linux": "node scripts/package/reinstall-latest-deb.cjs",
+    "package:linux:reinstall": "npm run package:linux && npm run reinstall:linux"
+  },
+  "build": {
+    "appId": "com.localfirst.apptemplatebase",
+    "productName": "App Template Base",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/app",
+        "to": "backend/app"
+      },
+      {
+        "from": "backend/.venv",
+        "to": "backend/.venv"
+      },
+      {
+        "from": "backend/pyproject.toml",
+        "to": "backend/pyproject.toml"
+      }
+    ],
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Utility",
+      "icon": "electron/assets/icons"
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnss3",
+        "libxss1",
+        "libasound2"
+      ]
+    }
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
     "electron": "^31.7.7",
+    "electron-builder": "^26.15.3",
     "wait-on": "^8.0.5"
   }
 }

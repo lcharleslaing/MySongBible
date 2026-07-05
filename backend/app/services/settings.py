@@ -299,7 +299,12 @@ class SettingsService:
         frontend_package_name = f"{package_name}-frontend"
         version = definition.app_version
 
-        self._update_json_file(PROJECT_ROOT / "package.json", {"name": package_name, "version": version})
+        self._update_root_package_json(
+            PROJECT_ROOT / "package.json",
+            package_name=package_name,
+            version=version,
+            product_name=definition.app_display_name,
+        )
         self._update_json_file(PROJECT_ROOT / "frontend" / "package.json", {"name": frontend_package_name, "version": version})
         self._update_package_lock(PROJECT_ROOT / "package-lock.json", package_name, version, frontend_package_name)
         self._update_package_lock(PROJECT_ROOT / "frontend" / "package-lock.json", frontend_package_name, version)
@@ -323,6 +328,21 @@ class SettingsService:
             raise AppDefinitionApplyError(f"Expected project file was not found: {path_value}")
         data = json.loads(path_value.read_text(encoding="utf-8"))
         data.update(updates)
+        path_value.write_text(f"{json.dumps(data, indent=2)}\n", encoding="utf-8")
+
+    @staticmethod
+    def _update_root_package_json(path_value: Path, *, package_name: str, version: str, product_name: str) -> None:
+        if not path_value.exists():
+            raise AppDefinitionApplyError(f"Expected project file was not found: {path_value}")
+        data = json.loads(path_value.read_text(encoding="utf-8"))
+        data["name"] = package_name
+        data["version"] = version
+        data["desktopName"] = package_name
+        data["description"] = data.get("description") or "Local-first desktop application."
+        build = data.setdefault("build", {})
+        if isinstance(build, dict):
+            build["appId"] = f"com.localfirst.{package_name.replace('-', '.')}"
+            build["productName"] = product_name
         path_value.write_text(f"{json.dumps(data, indent=2)}\n", encoding="utf-8")
 
     @staticmethod

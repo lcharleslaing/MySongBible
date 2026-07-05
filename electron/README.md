@@ -33,6 +33,33 @@ This directory contains the desktop wrapper for AppTemplateBase.
 - Smoke mode also passes Chromium `--no-sandbox` so CI/container runs can launch Electron without Linux sandbox permissions.
 - Filesystem access flows through preload and the Electron main process only.
 
-## Packaging Status
+## Linux Packaging
 
-Production packaging is not fully configured yet. The main process contains a guard for missing packaged backend resources, but a distributable build still needs an explicit strategy for bundling the backend, Python runtime, virtual environment or installed dependencies, and local runtime directories.
+Linux packaging is configured through `electron-builder`.
+
+From the repository root:
+
+```bash
+npm run package:linux
+```
+
+This generates Linux icons, builds the frontend, and creates both:
+
+- `.deb`
+- `.AppImage`
+
+Artifacts are written to `release/`.
+
+To install or replace the current local `.deb` build:
+
+```bash
+npm run reinstall:linux
+```
+
+To build and then immediately reinstall the newest `.deb`:
+
+```bash
+npm run package:linux:reinstall
+```
+
+The packaged app includes the backend source and current backend virtualenv so it can run on this Linux machine without expecting backend dependencies to be installed globally. Local AI model files and runtime data are not bundled.
