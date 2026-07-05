@@ -173,6 +173,30 @@ function upsertEnv(lines, key, value, { overwrite = false } = {}) {
   return true;
 }
 
+function ensureCsvEnvIncludes(lines, key, requiredValues, fallbackValues = requiredValues) {
+  const matcher = new RegExp(`^${key}=`);
+  const index = lines.findIndex((line) => matcher.test(line));
+  if (index === -1) {
+    lines.push(`${key}=${fallbackValues.join(",")}`);
+    return true;
+  }
+
+  const currentValue = lines[index].slice(key.length + 1);
+  const values = currentValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const normalizedValues = new Set(values.map((item) => item.toLowerCase()));
+  const missingValues = requiredValues.filter((item) => !normalizedValues.has(item.toLowerCase()));
+
+  if (missingValues.length === 0) {
+    return false;
+  }
+
+  lines[index] = `${key}=${[...values, ...missingValues].join(",")}`;
+  return true;
+}
+
 function chooseWhisperModel() {
   return whisperModelCandidates.find((candidate) => fileExists(candidate)) || "";
 }
@@ -223,6 +247,36 @@ function ensureBackendEnv() {
     changed = true;
   }
   log("Using TTS engine: mock");
+
+  if (ensureCsvEnvIncludes(
+    lines,
+    "ALLOWED_AUDIO_EXTENSIONS",
+    ["webm"],
+    ["wav", "mp3", "ogg", "flac", "m4a", "webm"],
+  )) {
+    changed = true;
+    log("Ensured WebM recordings are allowed for STT uploads.");
+  }
+  if (ensureCsvEnvIncludes(
+    lines,
+    "ALLOWED_AUDIO_MIME_TYPES",
+    ["audio/webm"],
+    [
+      "audio/wav",
+      "audio/x-wav",
+      "audio/mpeg",
+      "audio/mp3",
+      "audio/ogg",
+      "audio/flac",
+      "audio/x-flac",
+      "audio/mp4",
+      "audio/m4a",
+      "audio/webm",
+    ],
+  )) {
+    changed = true;
+    log("Ensured audio/webm recordings are allowed for STT uploads.");
+  }
 
   if (changed) {
     writeText(envPath, `${lines.join("\n").replace(/\n+$/g, "")}\n`);

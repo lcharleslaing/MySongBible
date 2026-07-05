@@ -13,7 +13,8 @@ WHISPER_THREAD_COUNT=4
 WHISPER_TIMEOUT_SECONDS=120
 KEEP_UPLOADED_AUDIO_FILES=true
 MAX_UPLOAD_SIZE_BYTES=52428800
-ALLOWED_AUDIO_EXTENSIONS=wav,mp3,ogg,flac,m4a
+ALLOWED_AUDIO_EXTENSIONS=wav,mp3,ogg,flac,m4a,webm
+ALLOWED_AUDIO_MIME_TYPES=audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/ogg,audio/flac,audio/x-flac,audio/mp4,audio/m4a,audio/webm
 ```
 
 ## Behavior
@@ -39,7 +40,7 @@ Multipart form fields:
 - `title`: optional transcript title
 - `language`: optional language code
 
-The browser recorder may produce WebM/Opus on some platforms. This template rejects unsupported formats clearly; add an ffmpeg conversion step in a future app if direct `whisper.cpp` support is not enough.
+The browser recorder may produce WebM/Opus on some platforms. This template accepts `.webm` uploads and converts them to a temporary WAV with `ffmpeg` before invoking `whisper.cpp`.
 
 ## curl Example
 
