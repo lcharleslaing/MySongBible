@@ -4,6 +4,7 @@ import { HomePage } from "./pages/HomePage";
 import { VoiceLabPage } from "./pages/VoiceLabPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SystemHealthPage } from "./pages/SystemHealthPage";
+import { LocalAiSetupPage } from "./pages/LocalAiSetupPage";
 import { AppDefinitionProvider } from "./context/AppDefinitionContext";
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/voice-lab" element={<VoiceLabPage />} />
+          <Route path="/local-ai-setup" element={<LocalAiSetupPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/system-health" element={<SystemHealthPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

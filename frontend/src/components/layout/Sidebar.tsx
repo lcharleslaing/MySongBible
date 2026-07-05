@@ -4,6 +4,7 @@ import { useAppDefinition } from "../../context/AppDefinitionContext";
 const navItems = [
   { to: "/", label: "Home" },
   { to: "/voice-lab", label: "Voice Lab" },
+  { to: "/local-ai-setup", label: "Local AI Setup" },
   { to: "/settings", label: "Settings" },
   { to: "/system-health", label: "System Health" },
 ];

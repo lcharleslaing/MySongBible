@@ -178,14 +178,7 @@ function buildLocalAiCommand(payload) {
   }
 
   const scriptArgs = [];
-  if (options.dryRun || options.force) {
-    if (!definition.supportsSetupOptions) {
-      return {
-        ok: false,
-        message: `Local AI action ${action} does not support dryRun or force.`,
-      };
-    }
-
+  if (definition.supportsSetupOptions && (options.dryRun || options.force)) {
     scriptArgs.push("--");
     if (options.dryRun) {
       scriptArgs.push("--dry-run");
@@ -193,6 +186,11 @@ function buildLocalAiCommand(payload) {
     if (options.force) {
       scriptArgs.push("--force");
     }
+  } else if (!definition.supportsSetupOptions && options.force) {
+      return {
+        ok: false,
+        message: `Local AI action ${action} does not support force.`,
+      };
   }
 
   return {
