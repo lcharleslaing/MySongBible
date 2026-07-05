@@ -4,6 +4,9 @@ export type SettingsRecord = {
   app_name: string;
   app_env: string;
   app_definition: AppDefinitionRecord;
+  current_device_name: string;
+  selected_device_name: string;
+  device_profiles: DeviceSettingsProfileRecord[];
   database_url: string;
   sqlite_database_path: string;
   app_data_dir: string;
@@ -20,6 +23,19 @@ export type SettingsRecord = {
   tts_timeout_seconds: number;
   database_path_editable: boolean;
   database_path_note: string;
+};
+
+export type DeviceSettingsProfileRecord = {
+  device_name: string;
+  whisper_cpp_binary: string | null;
+  whisper_model_path: string | null;
+  whisper_thread_count: number;
+  tts_engine: string;
+  piper_binary: string | null;
+  piper_model_path: string | null;
+  audio_input_dir: string;
+  tts_output_dir: string;
+  tts_timeout_seconds: number;
 };
 
 export type AppDefinitionRecord = {
@@ -72,6 +88,30 @@ export async function updateAppDefinition(payload: AppDefinitionRecord) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse<SettingsRecord>(response);
+}
+
+export async function saveDeviceProfile(payload: DeviceSettingsProfileRecord) {
+  const response = await fetch(await buildApiUrl("/api/settings/device-profile"), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse<SettingsRecord>(response);
+}
+
+export async function applyDeviceProfile(deviceName: string) {
+  const response = await fetch(await buildApiUrl("/api/settings/device-profile/apply"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ device_name: deviceName }),
   });
 
   return parseJsonResponse<SettingsRecord>(response);

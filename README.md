@@ -1,4 +1,4 @@
-# AppTemplateBase
+# App Template Base
 
 AppTemplateBase is a reusable local-first desktop application template for building future apps with a consistent architecture.
 
@@ -39,6 +39,7 @@ AppTemplateBase is a reusable local-first desktop application template for build
 - Local TTS is centralized behind a pluggable engine layer with `mock` and Piper support.
 - Editable machine-local settings are stored in SQLite and override backend environment defaults, except `DATABASE_URL`, which is startup-only.
 - Settings includes an App Definition area for cloned projects to update visible app labels and core package metadata.
+- Settings includes Device Profiles for saving per-computer Whisper, Piper, TTS, and audio path bundles.
 - Voice cloning remains scaffold-only and does not download models or add heavy runtimes yet.
 
 ## Current Commands

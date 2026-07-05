@@ -4,7 +4,7 @@ import json
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import Settings
-from app.schemas.settings import AppDefinitionUpdateRequest
+from app.schemas.settings import AppDefinitionUpdateRequest, DeviceProfileApplyRequest, DeviceSettingsProfile
 from app.services.settings import SettingsService
 
 
@@ -212,3 +212,41 @@ def test_app_definition_updates_project_files(tmp_path, monkeypatch) -> None:
     assert "APP_NAME=My New App\n" == (project_root / ".env.example").read_text(encoding="utf-8")
     assert "APP_NAME=My New App Backend\n" == (backend_dir / ".env.example").read_text(encoding="utf-8")
     assert (project_root / "README.md").read_text(encoding="utf-8").startswith("# My New App")
+
+
+def test_device_profile_saves_to_file_and_applies_values(tmp_path, monkeypatch) -> None:
+    profile_file = tmp_path / "shared" / "config" / "device-profiles.json"
+    monkeypatch.setattr("app.services.settings.DEVICE_PROFILE_FILE", profile_file)
+    engine = create_engine(f"sqlite:///{tmp_path / 'device-settings.sqlite3'}", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        service = SettingsService(session, Settings())
+        saved = service.save_device_profile(
+            DeviceSettingsProfile(
+                device_name="studio-laptop",
+                whisper_cpp_binary="/opt/whisper-cli",
+                whisper_model_path="/opt/models/tiny.bin",
+                whisper_thread_count=8,
+                tts_engine="piper",
+                piper_binary="/opt/piper",
+                piper_model_path="/opt/amy.onnx",
+                audio_input_dir="/tmp/input",
+                tts_output_dir="/tmp/output",
+                tts_timeout_seconds=45,
+            )
+        )
+
+    assert saved.selected_device_name == "studio-laptop"
+    assert saved.piper_binary == "/opt/piper"
+    saved_profiles = json.loads(profile_file.read_text(encoding="utf-8"))["profiles"]
+    assert saved_profiles[0]["device_name"] == "studio-laptop"
+
+    with Session(engine) as session:
+        service = SettingsService(session, Settings())
+        applied = service.apply_device_profile(DeviceProfileApplyRequest(device_name="studio-laptop"))
+
+    assert applied.selected_device_name == "studio-laptop"
+    assert applied.whisper_thread_count == 8
+    assert applied.tts_engine == "piper"
+    assert applied.tts_output_dir == "/tmp/output"

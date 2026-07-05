@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "../api/client";
 import {
+  applyDeviceProfile,
   getSettings,
   type AppDefinitionRecord,
+  type DeviceSettingsProfileRecord,
   type SettingsRecord,
   type SettingsUpdatePayload,
+  saveDeviceProfile,
   updateAppDefinition,
   updateSettings,
 } from "../api/settings";
@@ -25,6 +28,8 @@ type FormState = {
   homeEyebrow: string;
   homeTitle: string;
   homeDescription: string;
+  deviceName: string;
+  selectedDeviceName: string;
   whisperBinaryPath: string;
   whisperModelPath: string;
   whisperThreadCount: string;
@@ -52,6 +57,8 @@ const initialFormState: FormState = {
   homeEyebrow: "Overview",
   homeTitle: "Reusable local-first desktop starter",
   homeDescription: "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
+  deviceName: "",
+  selectedDeviceName: "",
   whisperBinaryPath: "",
   whisperModelPath: "",
   whisperThreadCount: "4",
@@ -78,6 +85,8 @@ function buildFormState(data: SettingsRecord): FormState {
     homeEyebrow: appDefinition.home_eyebrow,
     homeTitle: appDefinition.home_title,
     homeDescription: appDefinition.home_description,
+    deviceName: data.selected_device_name || data.current_device_name,
+    selectedDeviceName: data.selected_device_name || data.current_device_name,
     whisperBinaryPath: data.whisper_cpp_binary || "",
     whisperModelPath: data.whisper_model_path || "",
     whisperThreadCount: String(data.whisper_thread_count),
@@ -118,6 +127,10 @@ function validateForm(formState: FormState): FormErrors {
     if (!formState[key].trim()) {
       errors[key] = "This field is required.";
     }
+  }
+
+  if (!formState.deviceName.trim()) {
+    errors.deviceName = "Device name is required.";
   }
 
   if (!Number.isInteger(threadCount) || threadCount < 1 || threadCount > 64) {
@@ -193,6 +206,21 @@ function buildAppDefinitionPayload(formState: FormState): AppDefinitionRecord {
   };
 }
 
+function buildDeviceProfilePayload(formState: FormState): DeviceSettingsProfileRecord {
+  return {
+    device_name: formState.deviceName.trim(),
+    whisper_cpp_binary: formState.whisperBinaryPath.trim() || null,
+    whisper_model_path: formState.whisperModelPath.trim() || null,
+    whisper_thread_count: Number(formState.whisperThreadCount),
+    tts_engine: formState.ttsEngine,
+    piper_binary: formState.piperBinaryPath.trim() || null,
+    piper_model_path: formState.piperModelPath.trim() || null,
+    audio_input_dir: formState.audioInputDirectory.trim(),
+    tts_output_dir: formState.audioOutputDirectory.trim(),
+    tts_timeout_seconds: Number(formState.ttsTimeoutSeconds),
+  };
+}
+
 function findVoiceEngineStatus(voiceStatus: VoiceStatusRecord | null, engineId: string) {
   return voiceStatus?.engines.find((engine) => engine.id === engineId) || null;
 }
@@ -207,6 +235,7 @@ export function SettingsPage() {
   const [saveError, setSaveError] = useState("");
   const [backendHealth, setBackendHealth] = useState<string>("loading");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatusRecord | null>(null);
+  const [deviceProfiles, setDeviceProfiles] = useState<DeviceSettingsProfileRecord[]>([]);
   const [statusError, setStatusError] = useState("");
   const [databasePathNote, setDatabasePathNote] = useState("SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database.");
 
@@ -236,6 +265,7 @@ export function SettingsPage() {
         setFormState(nextFormState);
         setSavedState(nextFormState);
         setDatabasePathNote(settings.database_path_note);
+        setDeviceProfiles(settings.device_profiles);
         setBackendHealth(health.status);
         setVoiceStatus(voice);
         setStatusMessage("Loaded local settings. Environment values remain the defaults until you override them here.");
@@ -286,6 +316,7 @@ export function SettingsPage() {
       const nextFormState = buildFormState(savedWithDefinition || saved);
       setFormState(nextFormState);
       setSavedState(nextFormState);
+      setDeviceProfiles(savedWithDefinition.device_profiles);
       setStatusMessage("Settings saved. App definition files were updated for this clone.");
       const voice = await getVoiceStatus();
       setVoiceStatus(voice);
@@ -295,6 +326,58 @@ export function SettingsPage() {
       } else {
         setSaveError(error instanceof Error ? error.message : "Could not save settings.");
       }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveCurrentDeviceProfile = async () => {
+    const errors = validateForm(formState);
+    if (Object.keys(errors).length > 0) {
+      setSaveError("Fix validation errors before saving a device profile.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveError("");
+      setStatusMessage("Saving device profile...");
+      const saved = await saveDeviceProfile(buildDeviceProfilePayload(formState));
+      const nextFormState = buildFormState(saved);
+      setFormState(nextFormState);
+      setSavedState(nextFormState);
+      setDeviceProfiles(saved.device_profiles);
+      setStatusMessage(`Device profile saved for ${saved.selected_device_name}.`);
+      const voice = await getVoiceStatus();
+      setVoiceStatus(voice);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save device profile.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const applySelectedDeviceProfile = async () => {
+    const deviceName = formState.selectedDeviceName.trim();
+    if (!deviceName) {
+      setSaveError("Choose a saved device profile first.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveError("");
+      setStatusMessage("Applying device profile...");
+      const saved = await applyDeviceProfile(deviceName);
+      const nextFormState = buildFormState(saved);
+      setFormState(nextFormState);
+      setSavedState(nextFormState);
+      setDeviceProfiles(saved.device_profiles);
+      setStatusMessage(`Device profile applied for ${saved.selected_device_name}.`);
+      const voice = await getVoiceStatus();
+      setVoiceStatus(voice);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not apply device profile.");
     } finally {
       setIsSaving(false);
     }
@@ -517,6 +600,72 @@ export function SettingsPage() {
                   />
                   {formErrors.homeDescription ? <span className="label-text-alt text-error">{formErrors.homeDescription}</span> : null}
                 </label>
+              </div>
+            </div>
+
+            <div className="space-y-5 rounded-box border border-base-300 bg-base-200/40 p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Device Profiles</p>
+                <h2 className="mt-2 text-xl font-semibold text-base-content">Local machine settings</h2>
+                <p className="mt-1 text-sm text-base-content/70">
+                  Save Whisper, Piper, TTS, and audio paths per computer. Pick a saved device after cloning on another machine to restore that machine&apos;s local paths.
+                </p>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Device Name</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.deviceName ? "input-error" : ""}`}
+                    value={formState.deviceName}
+                    onChange={(event) => setField("deviceName", event.target.value)}
+                    disabled={isLoading || isSaving}
+                    placeholder="this-computer"
+                  />
+                  {formErrors.deviceName ? <span className="label-text-alt text-error">{formErrors.deviceName}</span> : null}
+                  <span className="label-text-alt text-base-content/60">Auto-filled from this computer&apos;s hostname; rename it if you want a friendlier label.</span>
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Saved Device Profiles</span>
+                  <select
+                    className="select select-bordered"
+                    value={formState.selectedDeviceName}
+                    onChange={(event) => setField("selectedDeviceName", event.target.value)}
+                    disabled={isLoading || isSaving || deviceProfiles.length === 0}
+                  >
+                    {deviceProfiles.length === 0 ? <option value="">No saved devices yet</option> : null}
+                    {deviceProfiles.map((profile) => (
+                      <option key={profile.device_name} value={profile.device_name}>
+                        {profile.device_name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="label-text-alt text-base-content/60">Applying a profile replaces the local path fields below.</span>
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={isLoading || isSaving || hasValidationErrors}
+                  onClick={saveCurrentDeviceProfile}
+                >
+                  Save Current Device Profile
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={isLoading || isSaving || !formState.selectedDeviceName || deviceProfiles.length === 0}
+                  onClick={applySelectedDeviceProfile}
+                >
+                  Apply Selected Profile
+                </button>
+                <p className="text-sm text-base-content/60">
+                  Profiles are stored in SQLite for this clone, so you can keep entries for all machines you use.
+                </p>
               </div>
             </div>
 

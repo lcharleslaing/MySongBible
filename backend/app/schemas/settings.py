@@ -15,10 +15,48 @@ class AppDefinition(BaseModel):
     home_description: str
 
 
+class DeviceSettingsProfile(BaseModel):
+    device_name: str
+    whisper_cpp_binary: str | None = None
+    whisper_model_path: str | None = None
+    whisper_thread_count: int = Field(ge=1, le=64)
+    tts_engine: str = Field(min_length=1, max_length=100)
+    piper_binary: str | None = None
+    piper_model_path: str | None = None
+    audio_input_dir: str = Field(min_length=1)
+    tts_output_dir: str = Field(min_length=1)
+    tts_timeout_seconds: int = Field(gt=0)
+
+    @field_validator("device_name")
+    @classmethod
+    def validate_device_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Device name is required.")
+        if len(normalized) > 80:
+            raise ValueError("Device name must be 80 characters or fewer.")
+        return normalized
+
+    @field_validator("tts_engine")
+    @classmethod
+    def validate_profile_tts_engine(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"mock", "piper"}:
+            raise ValueError("TTS engine must be mock or piper.")
+        return normalized
+
+
+class DeviceProfileApplyRequest(BaseModel):
+    device_name: str = Field(min_length=1, max_length=80)
+
+
 class PublicSettingsResponse(BaseModel):
     app_name: str
     app_env: str
     app_definition: AppDefinition
+    current_device_name: str
+    selected_device_name: str
+    device_profiles: list[DeviceSettingsProfile]
     database_url: str
     sqlite_database_path: str
     app_data_dir: str

@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "main": "electron/main/index.cjs",
-  "workspaces": ["frontend"],
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
     "start": "node scripts/dev/bootstrap-start.cjs",
     "start:bootstrap-only": "node scripts/dev/bootstrap-start.cjs --bootstrap-only",

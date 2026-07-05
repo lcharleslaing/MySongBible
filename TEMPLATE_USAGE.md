@@ -128,6 +128,8 @@ Do not commit real runtime data. The repository ignore rules already exclude:
 
 All speech tooling stays local-only.
 
+Local AI and audio paths are usually different on every computer. In Settings, use `Device Profiles` to name the current machine, save its Whisper/Piper/audio paths, and later apply a saved profile after cloning onto another device. Saved profiles are written to `shared/config/device-profiles.json` so they can travel with the project when you choose to commit them; the currently selected device remains a local SQLite setting.
+
 Set machine-specific backend defaults in `backend/.env` or use the desktop Settings UI for editable voice/audio paths:
 
 ```env

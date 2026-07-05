@@ -1,12 +1,20 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import socket
 
 from sqlmodel import Session, select
 
 from app.core.config import Settings
 from app.models.app_setting import AppSetting
-from app.schemas.settings import AppDefinition, AppDefinitionUpdateRequest, PublicSettingsResponse, SettingsUpdateRequest
+from app.schemas.settings import (
+    AppDefinition,
+    AppDefinitionUpdateRequest,
+    DeviceProfileApplyRequest,
+    DeviceSettingsProfile,
+    PublicSettingsResponse,
+    SettingsUpdateRequest,
+)
 
 
 class StartupOnlySettingError(ValueError):
@@ -36,6 +44,9 @@ APP_DEFINITION_DEFAULTS = {
     "home_title": "Reusable local-first desktop starter",
     "home_description": "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
 }
+
+DEVICE_PROFILE_PREFIX = "device_profile."
+DEVICE_PROFILE_FILE = PROJECT_ROOT / "shared" / "config" / "device-profiles.json"
 
 
 class SettingsService:
@@ -73,6 +84,9 @@ class SettingsService:
             app_name=self.base_settings.app_name,
             app_env=self.base_settings.app_env,
             app_definition=self._get_app_definition(overrides),
+            current_device_name=self._current_device_name(),
+            selected_device_name=overrides.get("selected_device_name", self._current_device_name()),
+            device_profiles=self._get_device_profiles(overrides),
             database_url=database_url,
             sqlite_database_path=self._sqlite_path_from_url(database_url),
             app_data_dir=str(self.base_settings.app_data_dir),
@@ -112,6 +126,27 @@ class SettingsService:
         for key, value in updates.items():
             self._upsert_setting(key, value)
 
+        self.session.commit()
+        return self.get_public_settings()
+
+    def save_device_profile(self, payload: DeviceSettingsProfile) -> PublicSettingsResponse:
+        profile = payload.model_dump()
+        device_name = str(profile["device_name"])
+        self._upsert_setting(f"{DEVICE_PROFILE_PREFIX}{device_name}", json.dumps(profile, sort_keys=True))
+        self._upsert_setting("selected_device_name", device_name)
+        self._save_device_profile_to_file(profile)
+        self._apply_device_profile_values(profile)
+        self.session.commit()
+        return self.get_public_settings()
+
+    def apply_device_profile(self, payload: DeviceProfileApplyRequest) -> PublicSettingsResponse:
+        overrides = self._get_overrides()
+        device_name = payload.device_name.strip()
+        profile = self._get_device_profile_by_name(device_name, overrides)
+        if not profile:
+            raise StartupOnlySettingError(f"Device profile was not found: {device_name}")
+        self._upsert_setting("selected_device_name", device_name)
+        self._apply_device_profile_values(profile)
         self.session.commit()
         return self.get_public_settings()
 
@@ -162,6 +197,81 @@ class SettingsService:
 
         return AppDefinition(**values)
 
+    def _get_device_profiles(self, overrides: dict[str, str]) -> list[DeviceSettingsProfile]:
+        raw_profiles = self._read_device_profile_file()
+        for key, value in overrides.items():
+            if not key.startswith(DEVICE_PROFILE_PREFIX):
+                continue
+            try:
+                profile = json.loads(value)
+                raw_profiles[str(profile["device_name"])] = profile
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+        profiles = []
+        for profile in raw_profiles.values():
+            try:
+                profiles.append(DeviceSettingsProfile(**profile))
+            except ValueError:
+                continue
+        return sorted(profiles, key=lambda profile: profile.device_name.lower())
+
+    def _get_device_profile_by_name(self, device_name: str, overrides: dict[str, str]) -> dict[str, object] | None:
+        raw_profile = overrides.get(f"{DEVICE_PROFILE_PREFIX}{device_name}")
+        if raw_profile:
+            try:
+                return dict(json.loads(raw_profile))
+            except json.JSONDecodeError:
+                pass
+        return self._read_device_profile_file().get(device_name)
+
+    @staticmethod
+    def _read_device_profile_file() -> dict[str, dict[str, object]]:
+        if not DEVICE_PROFILE_FILE.exists():
+            return {}
+        try:
+            data = json.loads(DEVICE_PROFILE_FILE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+        profiles = data.get("profiles") if isinstance(data, dict) else None
+        if not isinstance(profiles, list):
+            return {}
+        return {
+            str(profile.get("device_name")): dict(profile)
+            for profile in profiles
+            if isinstance(profile, dict) and profile.get("device_name")
+        }
+
+    @staticmethod
+    def _write_device_profile_file(profiles: dict[str, dict[str, object]]) -> None:
+        DEVICE_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ordered_profiles = [profiles[name] for name in sorted(profiles, key=str.lower)]
+        DEVICE_PROFILE_FILE.write_text(
+            f"{json.dumps({'profiles': ordered_profiles}, indent=2)}\n",
+            encoding="utf-8",
+        )
+
+    def _save_device_profile_to_file(self, profile: dict[str, object]) -> None:
+        profiles = self._read_device_profile_file()
+        profiles[str(profile["device_name"])] = profile
+        self._write_device_profile_file(profiles)
+
+    def _apply_device_profile_values(self, profile: dict[str, object]) -> None:
+        updates = {
+            "whisper_cpp_binary": str(profile.get("whisper_cpp_binary") or ""),
+            "whisper_model_path": str(profile.get("whisper_model_path") or ""),
+            "whisper_thread_count": str(profile.get("whisper_thread_count") or self.base_settings.whisper_thread_count),
+            "tts_engine": str(profile.get("tts_engine") or self.base_settings.tts_engine),
+            "default_tts_engine": str(profile.get("tts_engine") or self.base_settings.tts_engine),
+            "piper_binary": str(profile.get("piper_binary") or ""),
+            "piper_model_path": str(profile.get("piper_model_path") or ""),
+            "audio_input_dir": str(profile.get("audio_input_dir") or self.base_settings.audio_input_dir),
+            "tts_output_dir": str(profile.get("tts_output_dir") or self.base_settings.audio_tts_dir),
+            "tts_timeout_seconds": str(profile.get("tts_timeout_seconds") or self.base_settings.tts_timeout_seconds),
+        }
+
+        for key, value in updates.items():
+            self._upsert_setting(key, value)
+
     def _upsert_setting(self, key: str, value: str) -> None:
         statement = select(AppSetting).where(AppSetting.key == key)
         existing = self.session.exec(statement).first()
@@ -179,6 +289,10 @@ class SettingsService:
                 updated_at=utc_now(),
             ),
         )
+
+    @staticmethod
+    def _current_device_name() -> str:
+        return socket.gethostname() or "local-device"
 
     def _apply_app_definition_to_project_files(self, definition: AppDefinition) -> None:
         package_name = definition.package_name
