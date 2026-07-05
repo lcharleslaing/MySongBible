@@ -34,17 +34,29 @@ function getWindowDisplayBounds(window) {
   return display.workArea;
 }
 
-function restoreWindowToDisplay(window) {
+function getCenteredDefaultBounds(window) {
+  const bounds = getWindowDisplayBounds(window);
+  const width = Math.round(bounds.width * 0.75);
+  const height = Math.round(bounds.height * 0.75);
+
+  return {
+    x: bounds.x + Math.round((bounds.width - width) / 2),
+    y: bounds.y + Math.round((bounds.height - height) / 2),
+    width,
+    height,
+  };
+}
+
+function restoreWindowToDefaultSize(window) {
   if (window.isDestroyed()) {
     return;
   }
 
-  const bounds = getWindowDisplayBounds(window);
-  window.setMinimumSize(Math.min(1100, bounds.width), Math.min(720, bounds.height));
   if (window.isMaximized()) {
     window.unmaximize();
   }
-  window.setBounds(bounds, false);
+  window.setMinimumSize(800, 600);
+  window.setBounds(getCenteredDefaultBounds(window), false);
   window.focus();
 }
 
@@ -89,7 +101,7 @@ function createMainWindow() {
   });
 
   window.on("leave-full-screen", () => {
-    setTimeout(() => restoreWindowToDisplay(window), 50);
+    setTimeout(() => restoreWindowToDefaultSize(window), 50);
   });
 
   window.webContents.on("before-input-event", (event, input) => {
@@ -117,7 +129,6 @@ function createMainWindow() {
   });
 
   window.once("ready-to-show", () => {
-    restoreWindowToDisplay(window);
     window.setFullScreen(true);
     window.show();
   });
