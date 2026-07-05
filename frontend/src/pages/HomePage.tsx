@@ -1,5 +1,6 @@
 import { PageHeader } from "../components/ui/PageHeader";
 import { DesktopInfoCard } from "../components/desktop/DesktopInfoCard";
+import { useAppDefinition } from "../context/AppDefinitionContext";
 
 const quickStartItems = [
   "Electron, React, and FastAPI are already wired into a single local desktop workflow.",
@@ -8,12 +9,14 @@ const quickStartItems = [
 ];
 
 export function HomePage() {
+  const { appDefinition } = useAppDefinition();
+
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Overview"
-        title="Reusable local-first desktop starter"
-        description="This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling."
+        eyebrow={appDefinition.home_eyebrow}
+        title={appDefinition.home_title}
+        description={appDefinition.home_description}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">

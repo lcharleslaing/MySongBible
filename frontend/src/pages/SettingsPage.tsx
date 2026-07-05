@@ -1,11 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "../api/client";
-import { getSettings, type SettingsRecord, type SettingsUpdatePayload, updateSettings } from "../api/settings";
+import {
+  getSettings,
+  type AppDefinitionRecord,
+  type SettingsRecord,
+  type SettingsUpdatePayload,
+  updateAppDefinition,
+  updateSettings,
+} from "../api/settings";
 import { getBackendHealth, getVoiceStatus, type VoiceStatusRecord } from "../api/system";
 import { PageHeader } from "../components/ui/PageHeader";
+import { useAppDefinition } from "../context/AppDefinitionContext";
 
 type FormState = {
+  packageName: string;
+  appVersion: string;
+  appDisplayName: string;
+  sidebarEyebrow: string;
+  sidebarTitle: string;
+  sidebarDescription: string;
+  topbarEyebrow: string;
+  topbarTitle: string;
+  homeEyebrow: string;
+  homeTitle: string;
+  homeDescription: string;
   whisperBinaryPath: string;
   whisperModelPath: string;
   whisperThreadCount: string;
@@ -22,6 +41,17 @@ type FormErrors = Partial<Record<keyof FormState, string>>;
 type FormWarnings = Partial<Record<keyof FormState, string>>;
 
 const initialFormState: FormState = {
+  packageName: "apptemplatebase",
+  appVersion: "0.1.0",
+  appDisplayName: "AppTemplateBase",
+  sidebarEyebrow: "AppTemplateBase",
+  sidebarTitle: "Desktop Starter",
+  sidebarDescription: "Local-first shell for voice-enabled desktop apps.",
+  topbarEyebrow: "Local-First Workspace",
+  topbarTitle: "Frontend Starter",
+  homeEyebrow: "Overview",
+  homeTitle: "Reusable local-first desktop starter",
+  homeDescription: "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
   whisperBinaryPath: "",
   whisperModelPath: "",
   whisperThreadCount: "4",
@@ -35,7 +65,19 @@ const initialFormState: FormState = {
 };
 
 function buildFormState(data: SettingsRecord): FormState {
+  const appDefinition = data.app_definition;
   return {
+    packageName: appDefinition.package_name,
+    appVersion: appDefinition.app_version,
+    appDisplayName: appDefinition.app_display_name,
+    sidebarEyebrow: appDefinition.sidebar_eyebrow,
+    sidebarTitle: appDefinition.sidebar_title,
+    sidebarDescription: appDefinition.sidebar_description,
+    topbarEyebrow: appDefinition.topbar_eyebrow,
+    topbarTitle: appDefinition.topbar_title,
+    homeEyebrow: appDefinition.home_eyebrow,
+    homeTitle: appDefinition.home_title,
+    homeDescription: appDefinition.home_description,
     whisperBinaryPath: data.whisper_cpp_binary || "",
     whisperModelPath: data.whisper_model_path || "",
     whisperThreadCount: String(data.whisper_thread_count),
@@ -53,6 +95,30 @@ function validateForm(formState: FormState): FormErrors {
   const errors: FormErrors = {};
   const threadCount = Number(formState.whisperThreadCount);
   const timeoutSeconds = Number(formState.ttsTimeoutSeconds);
+
+  if (!/^[a-z0-9][a-z0-9._-]{0,213}$/.test(formState.packageName.trim()) || formState.packageName.includes("..")) {
+    errors.packageName = "Package name must be lowercase npm-safe text, such as my-new-app.";
+  }
+
+  if (!/^\d+\.\d+\.\d+$/.test(formState.appVersion.trim())) {
+    errors.appVersion = "Version must use major.minor.patch format, such as 0.1.0.";
+  }
+
+  for (const key of [
+    "appDisplayName",
+    "sidebarEyebrow",
+    "sidebarTitle",
+    "sidebarDescription",
+    "topbarEyebrow",
+    "topbarTitle",
+    "homeEyebrow",
+    "homeTitle",
+    "homeDescription",
+  ] as const) {
+    if (!formState[key].trim()) {
+      errors[key] = "This field is required.";
+    }
+  }
 
   if (!Number.isInteger(threadCount) || threadCount < 1 || threadCount > 64) {
     errors.whisperThreadCount = "Thread count must be an integer between 1 and 64.";
@@ -111,11 +177,28 @@ function buildPayload(formState: FormState): SettingsUpdatePayload {
   };
 }
 
+function buildAppDefinitionPayload(formState: FormState): AppDefinitionRecord {
+  return {
+    package_name: formState.packageName.trim().toLowerCase(),
+    app_version: formState.appVersion.trim(),
+    app_display_name: formState.appDisplayName.trim(),
+    sidebar_eyebrow: formState.sidebarEyebrow.trim(),
+    sidebar_title: formState.sidebarTitle.trim(),
+    sidebar_description: formState.sidebarDescription.trim(),
+    topbar_eyebrow: formState.topbarEyebrow.trim(),
+    topbar_title: formState.topbarTitle.trim(),
+    home_eyebrow: formState.homeEyebrow.trim(),
+    home_title: formState.homeTitle.trim(),
+    home_description: formState.homeDescription.trim(),
+  };
+}
+
 function findVoiceEngineStatus(voiceStatus: VoiceStatusRecord | null, engineId: string) {
   return voiceStatus?.engines.find((engine) => engine.id === engineId) || null;
 }
 
 export function SettingsPage() {
+  const { setAppDefinition } = useAppDefinition();
   const [formState, setFormState] = useState<FormState>(initialFormState);
   const [savedState, setSavedState] = useState<FormState>(initialFormState);
   const [isLoading, setIsLoading] = useState(true);
@@ -198,10 +281,12 @@ export function SettingsPage() {
       setSaveError("");
       setStatusMessage("Saving settings...");
       const saved = await updateSettings(buildPayload(formState));
-      const nextFormState = buildFormState(saved);
+      const savedWithDefinition = await updateAppDefinition(buildAppDefinitionPayload(formState));
+      setAppDefinition(savedWithDefinition.app_definition);
+      const nextFormState = buildFormState(savedWithDefinition || saved);
       setFormState(nextFormState);
       setSavedState(nextFormState);
-      setStatusMessage("Settings saved.");
+      setStatusMessage("Settings saved. App definition files were updated for this clone.");
       const voice = await getVoiceStatus();
       setVoiceStatus(voice);
     } catch (error) {
@@ -262,7 +347,7 @@ export function SettingsPage() {
       <PageHeader
         eyebrow="Settings"
         title="Local settings management"
-        description="Environment variables provide defaults. Saving here stores local overrides in SQLite and those overrides win on future app launches."
+        description="Define the cloned app identity, then tune local runtime paths. App Definition also updates project metadata files."
       />
 
       <section className="grid gap-4 xl:grid-cols-3">
@@ -286,6 +371,154 @@ export function SettingsPage() {
                 <span className="text-sm">{saveError}</span>
               </div>
             ) : null}
+
+            <div className="space-y-5 rounded-box border border-base-300 bg-base-200/40 p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">App Definition</p>
+                <h2 className="mt-2 text-xl font-semibold text-base-content">Clone identity</h2>
+                <p className="mt-1 text-sm text-base-content/70">
+                  These fields make a cloned project feel like its own app. Saving updates the live UI plus package metadata and starter project files.
+                </p>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Package Name</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.packageName ? "input-error" : ""}`}
+                    value={formState.packageName}
+                    onChange={(event) => setField("packageName", event.target.value)}
+                    disabled={isLoading || isSaving}
+                    placeholder="my-new-app"
+                  />
+                  {formErrors.packageName ? <span className="label-text-alt text-error">{formErrors.packageName}</span> : null}
+                  <span className="label-text-alt text-base-content/60">Updates root and frontend package metadata.</span>
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Version</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.appVersion ? "input-error" : ""}`}
+                    value={formState.appVersion}
+                    onChange={(event) => setField("appVersion", event.target.value)}
+                    disabled={isLoading || isSaving}
+                    placeholder="0.1.0"
+                  />
+                  {formErrors.appVersion ? <span className="label-text-alt text-error">{formErrors.appVersion}</span> : null}
+                </label>
+
+                <label className="form-control gap-2 lg:col-span-2">
+                  <span className="label-text font-medium">App Display Name</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.appDisplayName ? "input-error" : ""}`}
+                    value={formState.appDisplayName}
+                    onChange={(event) => setField("appDisplayName", event.target.value)}
+                    disabled={isLoading || isSaving}
+                    placeholder="My New App"
+                  />
+                  {formErrors.appDisplayName ? <span className="label-text-alt text-error">{formErrors.appDisplayName}</span> : null}
+                  <span className="label-text-alt text-base-content/60">Updates the browser title, README title, and environment examples.</span>
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Sidebar Eyebrow</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.sidebarEyebrow ? "input-error" : ""}`}
+                    value={formState.sidebarEyebrow}
+                    onChange={(event) => setField("sidebarEyebrow", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.sidebarEyebrow ? <span className="label-text-alt text-error">{formErrors.sidebarEyebrow}</span> : null}
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Sidebar Title</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.sidebarTitle ? "input-error" : ""}`}
+                    value={formState.sidebarTitle}
+                    onChange={(event) => setField("sidebarTitle", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.sidebarTitle ? <span className="label-text-alt text-error">{formErrors.sidebarTitle}</span> : null}
+                </label>
+
+                <label className="form-control gap-2 lg:col-span-2">
+                  <span className="label-text font-medium">Sidebar Description</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.sidebarDescription ? "input-error" : ""}`}
+                    value={formState.sidebarDescription}
+                    onChange={(event) => setField("sidebarDescription", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.sidebarDescription ? <span className="label-text-alt text-error">{formErrors.sidebarDescription}</span> : null}
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Topbar Eyebrow</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.topbarEyebrow ? "input-error" : ""}`}
+                    value={formState.topbarEyebrow}
+                    onChange={(event) => setField("topbarEyebrow", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.topbarEyebrow ? <span className="label-text-alt text-error">{formErrors.topbarEyebrow}</span> : null}
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Topbar Title</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.topbarTitle ? "input-error" : ""}`}
+                    value={formState.topbarTitle}
+                    onChange={(event) => setField("topbarTitle", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.topbarTitle ? <span className="label-text-alt text-error">{formErrors.topbarTitle}</span> : null}
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Home Eyebrow</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.homeEyebrow ? "input-error" : ""}`}
+                    value={formState.homeEyebrow}
+                    onChange={(event) => setField("homeEyebrow", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.homeEyebrow ? <span className="label-text-alt text-error">{formErrors.homeEyebrow}</span> : null}
+                </label>
+
+                <label className="form-control gap-2">
+                  <span className="label-text font-medium">Home Title</span>
+                  <input
+                    type="text"
+                    className={`input input-bordered ${formErrors.homeTitle ? "input-error" : ""}`}
+                    value={formState.homeTitle}
+                    onChange={(event) => setField("homeTitle", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.homeTitle ? <span className="label-text-alt text-error">{formErrors.homeTitle}</span> : null}
+                </label>
+
+                <label className="form-control gap-2 lg:col-span-2">
+                  <span className="label-text font-medium">Home Description</span>
+                  <textarea
+                    className={`textarea textarea-bordered min-h-24 ${formErrors.homeDescription ? "textarea-error" : ""}`}
+                    value={formState.homeDescription}
+                    onChange={(event) => setField("homeDescription", event.target.value)}
+                    disabled={isLoading || isSaving}
+                  />
+                  {formErrors.homeDescription ? <span className="label-text-alt text-error">{formErrors.homeDescription}</span> : null}
+                </label>
+              </div>
+            </div>
 
             <div className="grid gap-5 lg:grid-cols-2">
               <label className="form-control gap-2">

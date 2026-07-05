@@ -38,6 +38,7 @@ AppTemplateBase is a reusable local-first desktop application template for build
 - `whisper.cpp` speech-to-text is supported through configurable binary and model paths.
 - Local TTS is centralized behind a pluggable engine layer with `mock` and Piper support.
 - Editable machine-local settings are stored in SQLite and override backend environment defaults, except `DATABASE_URL`, which is startup-only.
+- Settings includes an App Definition area for cloned projects to update visible app labels and core package metadata.
 - Voice cloning remains scaffold-only and does not download models or add heavy runtimes yet.
 
 ## Current Commands

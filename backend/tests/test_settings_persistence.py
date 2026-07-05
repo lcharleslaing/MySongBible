@@ -1,4 +1,12 @@
 
+import json
+
+from sqlmodel import Session, SQLModel, create_engine
+
+from app.core.config import Settings
+from app.schemas.settings import AppDefinitionUpdateRequest
+from app.services.settings import SettingsService
+
 
 def test_settings_can_be_updated_and_reloaded(client) -> None:
     update_response = client.put(
@@ -130,3 +138,77 @@ def test_settings_reject_non_positive_tts_timeout(client) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_app_definition_updates_project_files(tmp_path, monkeypatch) -> None:
+    project_root = tmp_path / "Project"
+    frontend_dir = project_root / "frontend"
+    backend_dir = project_root / "backend"
+    frontend_dir.mkdir(parents=True)
+    backend_dir.mkdir()
+    (project_root / "package.json").write_text(
+        json.dumps({"name": "apptemplatebase", "version": "0.1.0", "private": True}),
+        encoding="utf-8",
+    )
+    (frontend_dir / "package.json").write_text(
+        json.dumps({"name": "apptemplatebase-frontend", "version": "0.1.0"}),
+        encoding="utf-8",
+    )
+    (project_root / "package-lock.json").write_text(
+        json.dumps(
+            {
+                "name": "apptemplatebase",
+                "version": "0.1.0",
+                "packages": {
+                    "": {"name": "apptemplatebase", "version": "0.1.0"},
+                    "frontend": {"name": "apptemplatebase-frontend", "version": "0.1.0"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (frontend_dir / "package-lock.json").write_text(
+        json.dumps(
+            {
+                "name": "apptemplatebase-frontend",
+                "version": "0.1.0",
+                "packages": {"": {"name": "apptemplatebase-frontend", "version": "0.1.0"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (frontend_dir / "index.html").write_text("<html><head><title>AppTemplateBase</title></head></html>", encoding="utf-8")
+    (project_root / ".env.example").write_text("APP_NAME=AppTemplateBase\n", encoding="utf-8")
+    (backend_dir / ".env.example").write_text("APP_NAME=AppTemplateBase Backend\n", encoding="utf-8")
+    (project_root / "README.md").write_text("# AppTemplateBase\n\nStarter.\n", encoding="utf-8")
+
+    monkeypatch.setattr("app.services.settings.PROJECT_ROOT", project_root)
+    engine = create_engine(f"sqlite:///{tmp_path / 'settings.sqlite3'}", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        service = SettingsService(session, Settings())
+        response = service.update_app_definition(
+            AppDefinitionUpdateRequest(
+                package_name="my-new-app",
+                app_version="1.2.3",
+                app_display_name="My New App",
+                sidebar_eyebrow="My App",
+                sidebar_title="Launch Console",
+                sidebar_description="Custom local workflow.",
+                topbar_eyebrow="Workspace",
+                topbar_title="Control Room",
+                home_eyebrow="Start",
+                home_title="Welcome to My New App",
+                home_description="A custom app built from the template.",
+            )
+        )
+
+    assert response.app_definition.package_name == "my-new-app"
+    assert json.loads((project_root / "package.json").read_text(encoding="utf-8"))["name"] == "my-new-app"
+    assert json.loads((frontend_dir / "package.json").read_text(encoding="utf-8"))["name"] == "my-new-app-frontend"
+    assert json.loads((project_root / "package-lock.json").read_text(encoding="utf-8"))["packages"]["frontend"]["name"] == "my-new-app-frontend"
+    assert "<title>My New App</title>" in (frontend_dir / "index.html").read_text(encoding="utf-8")
+    assert "APP_NAME=My New App\n" == (project_root / ".env.example").read_text(encoding="utf-8")
+    assert "APP_NAME=My New App Backend\n" == (backend_dir / ".env.example").read_text(encoding="utf-8")
+    assert (project_root / "README.md").read_text(encoding="utf-8").startswith("# My New App")

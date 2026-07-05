@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { useAppDefinition } from "../../context/AppDefinitionContext";
 import { ThemeSelector } from "../theme/ThemeSelector";
 
 function formatClock(value: Date) {
@@ -17,6 +18,7 @@ function formatClock(value: Date) {
 }
 
 export function Topbar() {
+  const { appDefinition } = useAppDefinition();
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -32,9 +34,9 @@ export function Topbar() {
         </label>
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-base-content/50">
-            Local-First Workspace
+            {appDefinition.topbar_eyebrow}
           </p>
-          <h2 className="text-lg font-semibold text-base-content">Frontend Starter</h2>
+          <h2 className="text-lg font-semibold text-base-content">{appDefinition.topbar_title}</h2>
         </div>
       </div>
       <div className="flex flex-none items-center gap-3">

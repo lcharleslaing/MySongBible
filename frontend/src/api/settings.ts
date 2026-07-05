@@ -3,6 +3,7 @@ import { buildApiUrl, parseJsonResponse } from "./client";
 export type SettingsRecord = {
   app_name: string;
   app_env: string;
+  app_definition: AppDefinitionRecord;
   database_url: string;
   sqlite_database_path: string;
   app_data_dir: string;
@@ -19,6 +20,20 @@ export type SettingsRecord = {
   tts_timeout_seconds: number;
   database_path_editable: boolean;
   database_path_note: string;
+};
+
+export type AppDefinitionRecord = {
+  package_name: string;
+  app_version: string;
+  app_display_name: string;
+  sidebar_eyebrow: string;
+  sidebar_title: string;
+  sidebar_description: string;
+  topbar_eyebrow: string;
+  topbar_title: string;
+  home_eyebrow: string;
+  home_title: string;
+  home_description: string;
 };
 
 export type SettingsUpdatePayload = {
@@ -40,6 +55,18 @@ export async function getSettings() {
 
 export async function updateSettings(payload: SettingsUpdatePayload) {
   const response = await fetch(await buildApiUrl("/api/settings"), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse<SettingsRecord>(response);
+}
+
+export async function updateAppDefinition(payload: AppDefinitionRecord) {
+  const response = await fetch(await buildApiUrl("/api/settings/app-definition"), {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",

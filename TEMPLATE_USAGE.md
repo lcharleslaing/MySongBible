@@ -19,6 +19,8 @@ If you are using a remote template flow instead, the important part is the same:
 
 On first `npm start`, AppTemplateBase detects the current folder name and updates a small set of safe identity fields if they still contain the original template identity. It then writes an ignored `.app-template-state.json` marker so later starts skip identity setup.
 
+You can also make the cloned app identity explicit from the desktop UI. Open Settings, use the `App Definition` area, then save. That updates visible UI labels, package names, version metadata, the browser title, README title, and environment example app names for the clone.
+
 The automatic setup updates:
 
 - root `package.json` `name`
