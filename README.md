@@ -49,6 +49,7 @@ From the repository root:
 - `npm run template:init` forces the template identity/default-path setup to run again
 - `npm run frontend:dev` runs the Vite renderer only
 - `npm run electron:dev` runs Electron against the Vite dev server
+- `npm run tts:check` validates the Piper paths in `backend/.env` and runs a short synthesis test when Piper is configured
 - `npm run build` builds the renderer bundle used by Electron production mode
 - `npm run typecheck` runs the frontend TypeScript check
 - `npm run electron:smoke` launches Electron against the built frontend and waits for backend health
@@ -90,7 +91,7 @@ npm run template:init
 TEMPLATE_INIT_FORCE=1 npm start
 ```
 
-Edit `backend/.env` manually if you want different Whisper or Piper paths.
+Edit `backend/.env` manually if you want different Whisper or Piper paths. `npm run tts:check` can verify Piper configuration, but it does not install Piper or download voice models.
 
 ## Local-Only Expectations
 

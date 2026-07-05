@@ -9,6 +9,7 @@
     "start:bootstrap-only": "node scripts/dev/bootstrap-start.cjs --bootstrap-only",
     "template:init": "node scripts/template/init-template.cjs --force",
     "template:init:check": "node scripts/template/init-template.cjs --dry-run",
+    "tts:check": "node scripts/setup/check-piper.mjs",
     "dev": "npm run app:dev",
     "app:dev": "concurrently -k \"npm:frontend:dev\" \"npm:electron:dev\"",
     "frontend:dev": "npm --prefix frontend start",
