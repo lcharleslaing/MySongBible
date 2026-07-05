@@ -55,7 +55,12 @@ export async function parseJsonResponse<T>(response: Response): Promise<T> {
       "detail" in details &&
       typeof (details as { detail?: unknown }).detail === "string"
         ? (details as { detail: string }).detail
-        : `Request failed with status ${response.status}`;
+        : typeof details === "object" &&
+            details !== null &&
+            "detail" in details &&
+            typeof (details as { detail?: { message?: unknown } }).detail?.message === "string"
+          ? (details as { detail: { message: string } }).detail.message
+          : `Request failed with status ${response.status}`;
 
     throw new ApiError(message, response.status, details);
   }

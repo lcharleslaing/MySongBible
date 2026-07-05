@@ -21,18 +21,11 @@ class TtsService:
         self.manager = manager
 
     def synthesize(self, payload: TtsSynthesisRequest) -> TtsSynthesisResponse:
-        if payload.voice_profile:
-            self._get_voice_profile(payload.voice_profile)
-
-        engine = self.manager.resolve_engine(payload.engine)
-        output_path = self._build_output_path(engine.capabilities.output_extension)
-
         job = SpeechJob(
             job_type="tts",
             status="running",
             input_text=payload.text,
-            output_audio_path=str(output_path),
-            engine_name=engine.engine_name,
+            engine_name=(payload.engine or self.manager.settings.tts_engine).strip().lower() or None,
             updated_at=utc_now(),
         )
         self.session.add(job)
@@ -40,10 +33,28 @@ class TtsService:
         self.session.refresh(job)
 
         try:
+            engine = self.manager.resolve_engine(payload.engine)
+            job.engine_name = engine.engine_name
+
+            voice_profile = payload.voice_profile.strip() if payload.voice_profile else None
+            if voice_profile and not engine.capabilities.supports_voice_profiles:
+                raise TtsEngineError(
+                    f"Engine '{engine.engine_name}' does not support voice profiles.",
+                    status_code=400,
+                )
+            if voice_profile:
+                self._get_voice_profile(voice_profile)
+
+            output_path = self._build_output_path(engine.capabilities.output_extension)
+            job.output_audio_path = str(output_path)
+            job.updated_at = utc_now()
+            self.session.add(job)
+            self.session.commit()
+
             result = engine.synthesize(
                 TtsSynthesisInput(
                     text=payload.text,
-                    voice_profile=payload.voice_profile,
+                    voice_profile=voice_profile,
                 ),
                 output_path,
             )
@@ -53,6 +64,7 @@ class TtsService:
             job.updated_at = utc_now()
             self.session.add(job)
             self.session.commit()
+            error.job_id = job.id
             raise
 
         job.status = result.status

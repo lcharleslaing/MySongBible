@@ -9,12 +9,14 @@ class TtsEngineError(Exception):
         message: str,
         *,
         status_code: int = 400,
+        job_id: int | None = None,
         stdout: str | None = None,
         stderr: str | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.job_id = job_id
         self.stdout = stdout
         self.stderr = stderr
 

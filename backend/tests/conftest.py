@@ -11,8 +11,9 @@ from app.main import app
 
 
 class ASGISyncClient:
-    def __init__(self, app) -> None:
+    def __init__(self, app, engine=None) -> None:
         self.app = app
+        self.engine = engine
 
     def get(self, url: str, **kwargs) -> httpx.Response:
         return self._request("GET", url, **kwargs)
@@ -44,6 +45,6 @@ def client(tmp_path: Path) -> Generator[ASGISyncClient, None, None]:
 
     app.dependency_overrides[get_session] = override_get_session
 
-    yield ASGISyncClient(app)
+    yield ASGISyncClient(app, engine)
 
     app.dependency_overrides.clear()

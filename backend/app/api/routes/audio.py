@@ -1,19 +1,26 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import FileResponse
 
 from app.services.settings import SettingsService
 from app.api.dependencies import get_settings_service
 
 router = APIRouter(tags=["audio"])
 
+MEDIA_TYPES_BY_EXTENSION = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+}
+
 
 @router.get("/audio/tts/{filename}")
 async def get_tts_audio(
     filename: str,
     settings_service: SettingsService = Depends(get_settings_service),
-) -> Response:
+) -> FileResponse:
     safe_name = Path(filename).name
     if safe_name != filename:
         raise HTTPException(status_code=400, detail="Invalid audio filename.")
@@ -27,8 +34,9 @@ async def get_tts_audio(
     if not candidate.exists() or not candidate.is_file():
         raise HTTPException(status_code=404, detail="Audio file not found.")
 
-    return Response(
-        content=candidate.read_bytes(),
-        media_type="audio/wav",
-        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    return FileResponse(
+        path=candidate,
+        media_type=MEDIA_TYPES_BY_EXTENSION.get(candidate.suffix.lower(), "application/octet-stream"),
+        filename=safe_name,
+        content_disposition_type="inline",
     )

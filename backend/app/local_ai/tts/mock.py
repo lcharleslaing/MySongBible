@@ -7,7 +7,7 @@ from app.local_ai.tts.base import BaseTtsEngine, TtsEngineCapabilities, TtsSynth
 class MockTtsEngine(BaseTtsEngine):
     engine_name = "mock"
     capabilities = TtsEngineCapabilities(
-        supports_voice_profiles=True,
+        supports_voice_profiles=False,
         supports_voice_cloning=False,
         output_extension="wav",
     )

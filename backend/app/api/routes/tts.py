@@ -23,6 +23,8 @@ async def synthesize_speech(
             status_code=error.status_code,
             detail={
                 "message": error.message,
+                "job_id": error.job_id,
+                "status": "failed",
                 "stdout": error.stdout,
                 "stderr": error.stderr,
             },

@@ -9,7 +9,8 @@ class TtsSynthesisRequest(BaseModel):
 
 class TtsSynthesisResponse(BaseModel):
     job_id: int
-    audio_file_path: str
+    audio_file_path: str | None = None
     audio_file_url: str | None = None
     engine_used: str
     status: str
+    error: str | None = None

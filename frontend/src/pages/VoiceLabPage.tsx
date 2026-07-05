@@ -2,6 +2,7 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
 import { ApiError, buildApiUrl } from "../api/client";
 import { TranscriptRecord, transcribeAudioRecording } from "../api/stt";
+import { VoiceEngineStatusRecord, getVoiceStatus } from "../api/system";
 import { TtsSynthesisRecord, synthesizeSpeech } from "../api/tts";
 import { PageHeader } from "../components/ui/PageHeader";
 import { useAudioRecorder } from "../features/voice-lab/useAudioRecorder";
@@ -84,6 +85,8 @@ export function VoiceLabPage() {
   const [transcriptExportMessage, setTranscriptExportMessage] = useState("");
   const [ttsText, setTtsText] = useState("This is a starter interface for future local text-to-speech testing.");
   const [ttsEngine, setTtsEngine] = useState("mock");
+  const [ttsEngines, setTtsEngines] = useState<VoiceEngineStatusRecord[]>([]);
+  const [isLoadingVoiceStatus, setIsLoadingVoiceStatus] = useState(true);
   const [voiceProfile, setVoiceProfile] = useState("");
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [ttsResult, setTtsResult] = useState<TtsSynthesisRecord | null>(null);
@@ -97,6 +100,38 @@ export function VoiceLabPage() {
       }
     };
   }, [selectedAudioUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadVoiceStatus = async () => {
+      setIsLoadingVoiceStatus(true);
+
+      try {
+        const status = await getVoiceStatus();
+        if (cancelled) {
+          return;
+        }
+
+        setTtsEngines(status.engines);
+        setTtsEngine(status.default_engine || "mock");
+      } catch (error) {
+        if (!cancelled) {
+          setTtsError(error instanceof Error ? error.message : "Voice status is not available.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingVoiceStatus(false);
+        }
+      }
+    };
+
+    loadVoiceStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const activeAudioSource = useMemo<AudioSource | null>(() => {
     if (selectedAudioFile && selectedAudioUrl) {
@@ -284,9 +319,29 @@ export function VoiceLabPage() {
     return ttsResult.audio_file_path;
   }, [ttsResult]);
 
+  const selectedTtsEngine = useMemo(() => {
+    return ttsEngines.find((engine) => engine.id === ttsEngine) || null;
+  }, [ttsEngine, ttsEngines]);
+
+  const selectedEngineSupportsProfiles = Boolean(selectedTtsEngine?.supports_voice_profiles);
+
+  const handleTtsEngineChange = (engineId: string) => {
+    const nextEngine = ttsEngines.find((engine) => engine.id === engineId) || null;
+    setTtsEngine(engineId);
+    if (!nextEngine?.supports_voice_profiles) {
+      setVoiceProfile("");
+    }
+  };
+
   const sendForSynthesis = async () => {
     if (!ttsText.trim()) {
       setTtsError("Enter text before sending it to the TTS service.");
+      setTtsSuccessMessage("");
+      return;
+    }
+
+    if (selectedTtsEngine && !selectedTtsEngine.available) {
+      setTtsError(selectedTtsEngine.message);
       setTtsSuccessMessage("");
       return;
     }
@@ -299,7 +354,7 @@ export function VoiceLabPage() {
       const result = await synthesizeSpeech({
         text: ttsText.trim(),
         engine: ttsEngine || undefined,
-        voice_profile: voiceProfile.trim() || undefined,
+        voice_profile: selectedEngineSupportsProfiles ? voiceProfile.trim() || undefined : undefined,
       });
       setTtsResult(result);
       setTtsSuccessMessage("Speech synthesis completed successfully.");
@@ -527,12 +582,25 @@ export function VoiceLabPage() {
                 <select
                   className="select select-bordered"
                   value={ttsEngine}
-                  onChange={(event) => setTtsEngine(event.target.value)}
-                  disabled={isSynthesizing}
+                  onChange={(event) => handleTtsEngineChange(event.target.value)}
+                  disabled={isSynthesizing || isLoadingVoiceStatus}
                 >
-                  <option value="mock">Mock</option>
-                  <option value="piper">Piper</option>
+                  {ttsEngines.length > 0 ? (
+                    ttsEngines.map((engine) => (
+                      <option key={engine.id} value={engine.id} disabled={!engine.available}>
+                        {engine.label}
+                        {engine.id === "piper" ? (engine.available ? " - ready" : " - not configured") : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="mock">Mock</option>
+                  )}
                 </select>
+                {selectedTtsEngine ? (
+                  <span className={`label-text-alt ${selectedTtsEngine.available ? "text-base-content/60" : "text-warning"}`}>
+                    {selectedTtsEngine.message}
+                  </span>
+                ) : null}
               </label>
 
               <label className="form-control gap-2">
@@ -540,11 +608,16 @@ export function VoiceLabPage() {
                 <input
                   type="text"
                   className="input input-bordered"
-                  placeholder="Optional future profile name"
+                  placeholder="Future voice-cloning profile"
                   value={voiceProfile}
                   onChange={(event) => setVoiceProfile(event.target.value)}
-                  disabled={isSynthesizing}
+                  disabled={isSynthesizing || !selectedEngineSupportsProfiles}
                 />
+                {!selectedEngineSupportsProfiles ? (
+                  <span className="label-text-alt text-base-content/60">
+                    Voice profiles are disabled for this engine. Future voice-cloning engines can enable them.
+                  </span>
+                ) : null}
               </label>
             </div>
 
@@ -575,7 +648,7 @@ export function VoiceLabPage() {
               <button
                 type="button"
                 className={`btn btn-secondary ${isSynthesizing ? "loading" : ""}`}
-                disabled={!ttsText.trim() || isSynthesizing}
+                disabled={!ttsText.trim() || isSynthesizing || isLoadingVoiceStatus || Boolean(selectedTtsEngine && !selectedTtsEngine.available)}
                 onClick={sendForSynthesis}
               >
                 Speak

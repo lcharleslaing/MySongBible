@@ -2,10 +2,11 @@ import { buildApiUrl, parseJsonResponse } from "./client";
 
 export type TtsSynthesisRecord = {
   job_id: number;
-  audio_file_path: string;
+  audio_file_path: string | null;
   audio_file_url: string | null;
   engine_used: string;
   status: string;
+  error: string | null;
 };
 
 export async function synthesizeSpeech(input: {
