@@ -24,6 +24,7 @@ function createMainWindow() {
     height: 920,
     minWidth: 1100,
     minHeight: 720,
+    fullscreen: true,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#f3f6ef",
@@ -39,6 +40,20 @@ function createMainWindow() {
   window.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") {
+      return;
+    }
+
+    if (input.key === "F11") {
+      window.setFullScreen(!window.isFullScreen());
+      event.preventDefault();
+    } else if (input.key === "Escape" && window.isFullScreen()) {
+      window.setFullScreen(false);
+      event.preventDefault();
+    }
   });
 
   window.once("ready-to-show", () => {
