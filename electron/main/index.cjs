@@ -153,9 +153,6 @@ function createMainWindow() {
 
   if (isDev && !useLocalDist) {
     window.loadURL(rendererUrl);
-    if (!smokeMode) {
-      window.webContents.openDevTools({ mode: "detach" });
-    }
   } else {
     const indexPath = path.join(app.getAppPath(), "frontend", "dist", "index.html");
     window.loadFile(indexPath);
