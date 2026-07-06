@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import re
 from subprocess import Popen, run
@@ -40,6 +41,10 @@ class AppCloneRunner:
         self._state = CloneJobState()
 
     def defaults(self) -> str | None:
+        package_repo = self._package_repository_url()
+        if package_repo:
+            return package_repo
+
         completed = run(
             ["git", "config", "--get", "remote.origin.url"],
             cwd=Path.cwd(),
@@ -51,6 +56,21 @@ class AppCloneRunner:
             return None
         value = completed.stdout.strip()
         return value or None
+
+    def _package_repository_url(self) -> str | None:
+        package_json_path = Path(__file__).resolve().parents[3] / "package.json"
+        if not package_json_path.exists():
+            return None
+        try:
+            package_data = json.loads(package_json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        repository = package_data.get("repository")
+        if isinstance(repository, str):
+            return repository.strip() or None
+        if isinstance(repository, dict) and isinstance(repository.get("url"), str):
+            return repository["url"].strip() or None
+        return None
 
     def status(self) -> AppCloneStatus:
         with self._lock:

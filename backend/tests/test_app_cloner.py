@@ -25,6 +25,15 @@ def wait_for_clone_status(client, *, timeout_seconds: float = 2.0):
     return latest
 
 
+def test_app_cloner_defaults_use_package_repository_url(client, tmp_path: Path) -> None:
+    client.app.dependency_overrides[get_app_settings] = override_settings_for_app_cloner(tmp_path)
+
+    response = client.get("/api/app-cloner/defaults")
+
+    assert response.status_code == 200
+    assert response.json()["repo_url"] == "https://github.com/lcharleslaing/AppTemplateBase.git"
+
+
 def test_app_cloner_rejects_missing_destination(client, tmp_path: Path) -> None:
     client.app.dependency_overrides[get_app_settings] = override_settings_for_app_cloner(tmp_path)
 

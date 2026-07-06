@@ -8,6 +8,10 @@
     "name": "Local Developer",
     "email": "local@example.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lcharleslaing/AppTemplateBase.git"
+  },
   "main": "electron/main/index.cjs",
   "workspaces": [
     "frontend"
