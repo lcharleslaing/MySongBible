@@ -65,12 +65,14 @@ class SttService:
         return transcript
 
     def _save_upload(self, upload_file: UploadFile) -> Path:
-        self._validate_upload_metadata(upload_file)
-        audio_input_dir = self.settings.audio_input_dir
-        audio_input_dir.mkdir(parents=True, exist_ok=True)
+        return self.save_upload_to_directory(upload_file, self.settings.audio_input_dir)
 
-        safe_name = Path(upload_file.filename or "upload.wav").name
-        destination_path = audio_input_dir / f"{uuid4().hex}_{safe_name}"
+    def save_upload_to_directory(self, upload_file: UploadFile, destination_dir: Path) -> Path:
+        self._validate_upload_metadata(upload_file)
+        destination_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_name = self.safe_upload_filename(upload_file.filename)
+        destination_path = destination_dir / f"{uuid4().hex}_{safe_name}"
 
         total_bytes = 0
         with destination_path.open("wb") as output_file:
@@ -87,6 +89,10 @@ class SttService:
 
         upload_file.file.close()
         return destination_path
+
+    @staticmethod
+    def safe_upload_filename(filename: str | None, fallback: str = "upload.wav") -> str:
+        return Path(filename or fallback).name
 
     def _prepare_transcription_audio(self, audio_file_path: Path) -> Path:
         if audio_file_path.suffix.lower() != ".webm":

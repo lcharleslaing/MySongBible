@@ -24,6 +24,12 @@ class ASGISyncClient:
     def put(self, url: str, **kwargs) -> httpx.Response:
         return self._request("PUT", url, **kwargs)
 
+    def patch(self, url: str, **kwargs) -> httpx.Response:
+        return self._request("PATCH", url, **kwargs)
+
+    def delete(self, url: str, **kwargs) -> httpx.Response:
+        return self._request("DELETE", url, **kwargs)
+
     def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         async def run_request() -> httpx.Response:
             transport = httpx.ASGITransport(app=self.app)

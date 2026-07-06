@@ -130,6 +130,30 @@ class Settings(BaseSettings):
     def audio_tts_dir(self) -> Path:
         return self.tts_output_dir or (self.app_data_dir / "audio" / "tts")
 
+    @property
+    def audio_journal_dir(self) -> Path:
+        return self.app_data_dir / "audio" / "journal"
+
+    @property
+    def audio_journal_originals_dir(self) -> Path:
+        return self.audio_journal_dir / "originals"
+
+    @property
+    def audio_journal_rerecords_dir(self) -> Path:
+        return self.audio_journal_dir / "rerecords"
+
+    @property
+    def audio_journal_imports_dir(self) -> Path:
+        return self.audio_journal_dir / "imports"
+
+    @property
+    def audio_journal_processed_dir(self) -> Path:
+        return self.audio_journal_dir / "processed"
+
+    @property
+    def voice_dataset_exports_dir(self) -> Path:
+        return self.app_data_dir / "exports" / "voice-datasets"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
