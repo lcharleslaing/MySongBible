@@ -105,3 +105,28 @@ def test_summary_uses_configured_whisper_model_path(tmp_path: Path, monkeypatch,
 
     output = capsys.readouterr().out
     assert f"- Whisper model: PASS {model}" in output
+
+
+def test_stt_config_without_sample_wav_passes(tmp_path: Path, monkeypatch) -> None:
+    backend_dir = tmp_path / "backend"
+    env_path = backend_dir / ".env"
+    model = tmp_path / "models" / "ggml-base.bin"
+    binary = tmp_path / "bin" / "whisper-cli"
+    backend_dir.mkdir()
+    model.parent.mkdir(parents=True)
+    binary.parent.mkdir(parents=True)
+    model.write_text("model", encoding="utf-8")
+    binary.write_text("binary", encoding="utf-8")
+    binary.chmod(0o755)
+    env_path.write_text(
+        f"WHISPER_CPP_BINARY={binary}\nWHISPER_MODEL_PATH={model}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(core, "BACKEND_DIR", backend_dir)
+    monkeypatch.setattr(core, "BACKEND_ENV_PATH", env_path)
+    monkeypatch.setattr(core, "REPO_ROOT", tmp_path)
+
+    result = core.check_stt()
+
+    assert result.status == "PASS"
+    assert result.messages[-1].text == "No sample WAV found; STT config validation passed."
