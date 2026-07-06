@@ -52,6 +52,24 @@ export type AudioJournalEntryRecord = {
   takes: AudioJournalTakeRecord[];
 };
 
+export type AudioJournalRecordingAtmosphereRecord = {
+  captured_at: string;
+  entry_id: number;
+  take_id: number;
+  take_number: number;
+  audio_filename: string;
+  duration_seconds: number | null;
+  sample_rate: number | null;
+  channels: number | null;
+  file_format: string | null;
+  quality_score: number | null;
+  noise_floor_db: number | null;
+  rms_db: number | null;
+  peak_db: number | null;
+  silence_ratio: number | null;
+  snr_estimate_db: number | null;
+};
+
 export type AudioJournalEntryUpdatePayload = Partial<{
   title: string;
   journal_date: string;
@@ -105,6 +123,11 @@ export async function listAudioJournalEntries() {
 export async function getAudioJournalEntry(entryId: number) {
   const response = await fetch(await buildApiUrl(`/api/audio-journal/${entryId}`));
   return parseJsonResponse<AudioJournalEntryRecord>(response);
+}
+
+export async function getAudioJournalRecordingAtmosphere() {
+  const response = await fetch(await buildApiUrl("/api/audio-journal/recording-atmosphere"));
+  return parseJsonResponse<AudioJournalRecordingAtmosphereRecord | null>(response);
 }
 
 export async function createAudioJournalEntry(formData: FormData) {
@@ -192,6 +215,14 @@ export async function analyzeAudioJournalTake(entryId: number, takeId: number) {
   });
 
   return parseJsonResponse<AudioJournalTakeRecord>(response);
+}
+
+export async function setAudioJournalRecordingAtmosphere(entryId: number, takeId: number) {
+  const response = await fetch(await buildApiUrl(`/api/audio-journal/${entryId}/takes/${takeId}/recording-atmosphere`), {
+    method: "POST",
+  });
+
+  return parseJsonResponse<AudioJournalRecordingAtmosphereRecord>(response);
 }
 
 export async function setActiveAudioJournalTake(entryId: number, takeId: number) {

@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import {
   analyzeAudioJournalTake,
   AudioJournalEntryRecord,
+  AudioJournalRecordingAtmosphereRecord,
   AudioJournalTakeRecord,
   buildAudioJournalTakeAudioUrl,
   createAudioJournalEntry,
@@ -11,8 +12,10 @@ import {
   deleteAudioJournalEntry,
   deleteAudioJournalTake,
   getAudioJournalEntry,
+  getAudioJournalRecordingAtmosphere,
   listAudioJournalEntries,
   setActiveAudioJournalTake,
+  setAudioJournalRecordingAtmosphere,
   setAudioJournalTrainingCandidate,
   transcribeAudioJournalTake,
   updateAudioJournalEntry,
@@ -43,6 +46,7 @@ type WorkingAction =
   | "delete-take"
   | "transcribe"
   | "analyze"
+  | "recording-atmosphere"
   | "set-active"
   | "training-candidate";
 
@@ -197,6 +201,7 @@ export function AudioJournalPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [takeAudioUrl, setTakeAudioUrl] = useState("");
+  const [recordingAtmosphere, setRecordingAtmosphere] = useState<AudioJournalRecordingAtmosphereRecord | null>(null);
   const [isTeleprompterOpen, setIsTeleprompterOpen] = useState(false);
   const [teleprompterScript, setTeleprompterScript] = useState("");
   const [teleprompterCountdown, setTeleprompterCountdown] = useState<number | null>(null);
@@ -336,8 +341,12 @@ export function AudioJournalPage() {
     setErrorMessage("");
 
     try {
-      const response = await listAudioJournalEntries();
+      const [response, atmosphere] = await Promise.all([
+        listAudioJournalEntries(),
+        getAudioJournalRecordingAtmosphere(),
+      ]);
       setEntries(response.items);
+      setRecordingAtmosphere(atmosphere);
 
       const nextEntry =
         response.items.find((entry) => entry.id === nextSelectedEntryId) ||
@@ -501,6 +510,15 @@ export function AudioJournalPage() {
       const take = await analyzeAudioJournalTake(entryId, takeId);
       await refreshSelectedEntry(entryId, take.id);
       setSuccessMessage("Quality analysis updated.");
+    });
+  }
+
+  async function handleSetRecordingAtmosphere(entryId: number, takeId: number) {
+    await runTakeAction("recording-atmosphere", async () => {
+      const atmosphere = await setAudioJournalRecordingAtmosphere(entryId, takeId);
+      setRecordingAtmosphere(atmosphere);
+      await refreshSelectedEntry(entryId, takeId);
+      setSuccessMessage("Recording atmosphere baseline updated.");
     });
   }
 
@@ -895,6 +913,37 @@ export function AudioJournalPage() {
                     <div className="alert alert-warning py-2 text-sm">Transcribe or enter script text first.</div>
                   ) : null}
 
+                  <div className="rounded-lg border border-base-300 bg-base-200 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">Recording atmosphere</h3>
+                        <p className="mt-1 text-sm text-base-content/70">
+                          {recordingAtmosphere
+                            ? `Using Take ${recordingAtmosphere.take_number} from ${formatDate(recordingAtmosphere.captured_at)} as the current baseline.`
+                            : "No baseline set. Pick your cleanest current recording and save it as the atmosphere."}
+                        </p>
+                      </div>
+                      {selectedTake ? (
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={workingAction === "recording-atmosphere"}
+                          onClick={() => handleSetRecordingAtmosphere(selectedEntry.id, selectedTake.id)}
+                        >
+                          Set Selected Take as Atmosphere
+                        </button>
+                      ) : null}
+                    </div>
+                    {recordingAtmosphere ? (
+                      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                        <span>Silence: {formatNumber(recordingAtmosphere.silence_ratio, "", 3)}</span>
+                        <span>RMS: {formatNumber(recordingAtmosphere.rms_db, " dB", 2)}</span>
+                        <span>Peak: {formatNumber(recordingAtmosphere.peak_db, " dB", 2)}</span>
+                        <span>SNR: {formatNumber(recordingAtmosphere.snr_estimate_db, " dB", 2)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="form-control">
                       <span className="label-text">Title</span>
@@ -1069,6 +1118,14 @@ export function AudioJournalPage() {
                                 <button
                                   type="button"
                                   className="btn btn-xs"
+                                  disabled={workingAction === "recording-atmosphere"}
+                                  onClick={() => handleSetRecordingAtmosphere(selectedEntry.id, take.id)}
+                                >
+                                  Set Atmosphere
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-xs"
                                   disabled={workingAction === "training-candidate"}
                                   onClick={() => handleMarkTrainingCandidate(selectedEntry, take)}
                                 >
@@ -1162,6 +1219,15 @@ export function AudioJournalPage() {
                       <div className="alert">
                         <span>{trainingExplanation(selectedEntry, selectedTake)}</span>
                       </div>
+
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={workingAction === "recording-atmosphere"}
+                        onClick={() => handleSetRecordingAtmosphere(selectedEntry.id, selectedTake.id)}
+                      >
+                        Set This Take as Best/Current Recording Atmosphere
+                      </button>
                     </>
                   ) : (
                     <div className="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">

@@ -10,10 +10,12 @@ from sqlmodel import Session, select
 
 from app.core.config import Settings
 from app.local_ai.stt.whisper_cpp import WhisperCppError, WhisperCppTranscriber
+from app.models.app_setting import AppSetting
 from app.models.audio_journal import AudioJournalEntry, AudioJournalTake
 from app.schemas.audio_journal import (
     AudioJournalEntryCreate,
     AudioJournalEntryUpdate,
+    AudioJournalRecordingAtmosphere,
     AudioJournalTakeCreate,
     AudioJournalTakeUpdate,
     AudioJournalTrainingCandidateUpdate,
@@ -24,6 +26,9 @@ from app.services.stt import SttService, SttUploadError
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+RECORDING_ATMOSPHERE_SETTING_KEY = "audio_journal.recording_atmosphere"
 
 
 class AudioJournalError(ValueError):
@@ -207,7 +212,11 @@ class AudioJournalService:
         entry = self.get_entry(entry_id)
         take = self.get_take(entry_id, take_id)
         has_training_text = bool((take.transcript_text or "").strip() or (entry.script_text or "").strip())
-        metrics = self.quality_analyzer.analyze(Path(take.audio_path), has_training_text=has_training_text)
+        metrics = self.quality_analyzer.analyze(
+            Path(take.audio_path),
+            has_training_text=has_training_text,
+            recording_atmosphere=self.get_recording_atmosphere(),
+        )
         for key, value in metrics.model_dump().items():
             setattr(take, key, value)
         self._apply_training_candidate_rules(take, entry, manual_override=False)
@@ -218,6 +227,54 @@ class AudioJournalService:
         self.session.commit()
         self.session.refresh(take)
         return take
+
+    def get_recording_atmosphere(self) -> AudioJournalRecordingAtmosphere | None:
+        statement = select(AppSetting).where(AppSetting.key == RECORDING_ATMOSPHERE_SETTING_KEY)
+        setting = self.session.exec(statement).first()
+        if not setting:
+            return None
+        try:
+            return AudioJournalRecordingAtmosphere.model_validate(json.loads(setting.value))
+        except (json.JSONDecodeError, ValueError):
+            return None
+
+    def set_recording_atmosphere_from_take(self, entry_id: int, take_id: int) -> AudioJournalRecordingAtmosphere:
+        take = self.analyze_take_quality(entry_id, take_id)
+        atmosphere = AudioJournalRecordingAtmosphere(
+            captured_at=utc_now(),
+            entry_id=entry_id,
+            take_id=take.id or take_id,
+            take_number=take.take_number,
+            audio_filename=take.audio_filename,
+            duration_seconds=take.duration_seconds,
+            sample_rate=take.sample_rate,
+            channels=take.channels,
+            file_format=take.file_format,
+            quality_score=take.quality_score,
+            noise_floor_db=take.noise_floor_db,
+            rms_db=take.rms_db,
+            peak_db=take.peak_db,
+            silence_ratio=take.silence_ratio,
+            snr_estimate_db=take.snr_estimate_db,
+        )
+        payload = atmosphere.model_dump_json()
+        statement = select(AppSetting).where(AppSetting.key == RECORDING_ATMOSPHERE_SETTING_KEY)
+        setting = self.session.exec(statement).first()
+        if setting:
+            setting.value = payload
+            setting.updated_at = utc_now()
+        else:
+            setting = AppSetting(
+                key=RECORDING_ATMOSPHERE_SETTING_KEY,
+                value=payload,
+                description="Best/current Audio Journal recording atmosphere baseline.",
+            )
+        self.session.add(setting)
+        self.session.commit()
+
+        # Re-run the selected take against the newly stored baseline so its status reflects calibration immediately.
+        self.analyze_take_quality(entry_id, take_id)
+        return atmosphere
 
     def transcribe_take(self, entry_id: int, take_id: int, *, language: str | None = None) -> AudioJournalTake:
         entry = self.get_entry(entry_id)

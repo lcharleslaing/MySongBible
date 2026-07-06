@@ -12,6 +12,7 @@ from app.schemas.audio_journal import (
     AudioJournalEntryRead,
     AudioJournalEntryUpdate,
     AudioJournalListResponse,
+    AudioJournalRecordingAtmosphere,
     AudioJournalTakeCreate,
     AudioJournalTakeRead,
     AudioJournalTakeUpdate,
@@ -82,6 +83,13 @@ async def list_audio_journal_entries(
     return AudioJournalListResponse(
         items=[serialize_entry(service, entry.id or 0) for entry in service.list_entries()],
     )
+
+
+@router.get("/audio-journal/recording-atmosphere", response_model=AudioJournalRecordingAtmosphere | None)
+async def get_audio_journal_recording_atmosphere(
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> AudioJournalRecordingAtmosphere | None:
+    return service.get_recording_atmosphere()
 
 
 @router.get("/audio-journal/{entry_id}", response_model=AudioJournalEntryRead)
@@ -232,6 +240,21 @@ async def analyze_audio_journal_take_quality(
 ) -> AudioJournalTakeRead:
     try:
         return AudioJournalTakeRead.model_validate(service.analyze_take_quality(entry_id, take_id))
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+
+
+@router.post(
+    "/audio-journal/{entry_id}/takes/{take_id}/recording-atmosphere",
+    response_model=AudioJournalRecordingAtmosphere,
+)
+async def set_audio_journal_recording_atmosphere(
+    entry_id: int,
+    take_id: int,
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> AudioJournalRecordingAtmosphere:
+    try:
+        return service.set_recording_atmosphere_from_take(entry_id, take_id)
     except AudioJournalError as error:
         raise handle_audio_journal_error(error) from error
 

@@ -20,6 +20,24 @@ class AudioQualityMetrics(BaseModel):
     snr_estimate_db: float | None = None
 
 
+class AudioJournalRecordingAtmosphere(BaseModel):
+    captured_at: datetime
+    entry_id: int
+    take_id: int
+    take_number: int
+    audio_filename: str
+    duration_seconds: float | None = None
+    sample_rate: int | None = None
+    channels: int | None = None
+    file_format: str | None = None
+    quality_score: float | None = None
+    noise_floor_db: float | None = None
+    rms_db: float | None = None
+    peak_db: float | None = None
+    silence_ratio: float | None = None
+    snr_estimate_db: float | None = None
+
+
 class AudioJournalEntryCreate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     journal_date: datetime | None = None

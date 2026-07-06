@@ -64,6 +64,25 @@ def paused_speech_wav_bytes(*, duration_seconds: float = 10, sample_rate: int = 
     return buffer.getvalue()
 
 
+def sparse_home_recording_wav_bytes(*, duration_seconds: float = 10, sample_rate: int = 16000) -> bytes:
+    buffer = BytesIO()
+    frame_count = int(duration_seconds * sample_rate)
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        frames = bytearray()
+        for index in range(frame_count):
+            second_fraction = (index % sample_rate) / sample_rate
+            if second_fraction < 0.2:
+                value = int(0.3 * math.sin(2 * math.pi * 220 * index / sample_rate) * 32767)
+            else:
+                value = 0
+            frames.extend(struct.pack("<h", value))
+        wav_file.writeframes(bytes(frames))
+    return buffer.getvalue()
+
+
 def override_settings_for_audio_journal(tmp_path: Path):
     async def override_settings() -> Settings:
         return Settings(
@@ -276,6 +295,35 @@ def test_audio_journal_paused_home_recording_remains_usable(client, tmp_path: Pa
 
     assert take["quality_status"] == "usable"
     assert "moderate_silence_ratio" in take["quality_reasons_json"]
+
+
+def test_audio_journal_recording_atmosphere_baseline_can_make_current_environment_usable(client, tmp_path: Path) -> None:
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=sparse_home_recording_wav_bytes(),
+        transcript_text="A realistic home recording with long pauses.",
+    )
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    assert payload["take"]["quality_status"] == "review"
+    assert "very_high_silence_ratio" in payload["take"]["quality_reasons_json"]
+
+    set_response = client.post(f"/api/audio-journal/{entry_id}/takes/{take_id}/recording-atmosphere")
+    assert set_response.status_code == 200
+    atmosphere = set_response.json()
+    assert atmosphere["entry_id"] == entry_id
+    assert atmosphere["take_id"] == take_id
+
+    get_response = client.get("/api/audio-journal/recording-atmosphere")
+    assert get_response.status_code == 200
+    assert get_response.json()["take_id"] == take_id
+
+    take_response = client.get(f"/api/audio-journal/{entry_id}/takes/{take_id}")
+    take = take_response.json()
+    assert take["quality_status"] == "usable"
+    assert "recording_atmosphere_baseline_applied" in take["quality_reasons_json"]
 
 
 def test_audio_journal_non_wav_returns_review_when_ffmpeg_missing(client, tmp_path: Path, monkeypatch) -> None:
