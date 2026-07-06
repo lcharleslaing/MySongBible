@@ -45,6 +45,25 @@ def clipped_wav_bytes(*, duration_seconds: float = 10, sample_rate: int = 16000)
     return buffer.getvalue()
 
 
+def paused_speech_wav_bytes(*, duration_seconds: float = 10, sample_rate: int = 16000) -> bytes:
+    buffer = BytesIO()
+    frame_count = int(duration_seconds * sample_rate)
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        frames = bytearray()
+        for index in range(frame_count):
+            second_fraction = (index % sample_rate) / sample_rate
+            if second_fraction < 0.5:
+                value = int(0.3 * math.sin(2 * math.pi * 220 * index / sample_rate) * 32767)
+            else:
+                value = 0
+            frames.extend(struct.pack("<h", value))
+        wav_file.writeframes(bytes(frames))
+    return buffer.getvalue()
+
+
 def override_settings_for_audio_journal(tmp_path: Path):
     async def override_settings() -> Settings:
         return Settings(
@@ -244,6 +263,19 @@ def test_audio_journal_short_duration_returns_review(client, tmp_path: Path) -> 
 
     assert take["quality_status"] in {"review", "rejected"}
     assert "duration_under_5_seconds" in take["quality_reasons_json"]
+
+
+def test_audio_journal_paused_home_recording_remains_usable(client, tmp_path: Path) -> None:
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=paused_speech_wav_bytes(),
+        transcript_text="A clean journal recording with normal pauses.",
+    )
+    take = payload["take"]
+
+    assert take["quality_status"] == "usable"
+    assert "moderate_silence_ratio" in take["quality_reasons_json"]
 
 
 def test_audio_journal_non_wav_returns_review_gracefully(client, tmp_path: Path) -> None:

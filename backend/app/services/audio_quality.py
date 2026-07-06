@@ -70,23 +70,26 @@ class AudioQualityAnalyzer:
             score -= 60
             reasons.append("clipping_detected")
 
-        if rms_db is None or rms_db < -45:
-            if status != "rejected":
-                status = "review"
-            score -= 20
-            reasons.append("rms_too_low")
-
-        if peak_db is None or peak_db < -35:
-            if status != "rejected":
-                status = "review"
-            score -= 10
-            reasons.append("peak_too_low")
-
-        if silence_ratio > 0.35:
+        if rms_db is None or rms_db < -50:
             if status != "rejected":
                 status = "review"
             score -= 15
-            reasons.append("high_silence_ratio")
+            reasons.append("rms_too_low")
+
+        if peak_db is None or peak_db < -45:
+            if status != "rejected":
+                status = "review"
+            score -= 8
+            reasons.append("peak_too_low")
+
+        if silence_ratio > 0.65:
+            if status != "rejected":
+                status = "review"
+            score -= 12
+            reasons.append("very_high_silence_ratio")
+        elif silence_ratio > 0.45:
+            score -= 5
+            reasons.append("moderate_silence_ratio")
 
         if not has_training_text:
             score -= 5

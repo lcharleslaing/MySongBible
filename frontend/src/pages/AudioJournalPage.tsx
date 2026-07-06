@@ -142,9 +142,6 @@ function trainingExplanation(entry: AudioJournalEntryRecord | null, take: AudioJ
   if (take.clipping_detected) {
     reasons.push("clipping detected");
   }
-  if (take.quality_score !== null && take.quality_score < 85) {
-    reasons.push("score below threshold");
-  }
   if (take.script_match_score !== null && take.script_match_score < 85) {
     reasons.push("script mismatch");
   }
