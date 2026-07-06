@@ -124,7 +124,14 @@ class AudioQualityAnalyzer:
             score -= 8
             reasons.append("peak_too_low")
 
-        if silence_ratio > 0.92:
+        baseline_silence = quality_baseline.silence_ratio if quality_baseline else None
+        mostly_silence_limit = self._mostly_silence_limit(baseline_silence)
+
+        if silence_ratio >= 0.995:
+            status = "rejected"
+            score -= 45
+            reasons.append("near_total_silence")
+        elif silence_ratio > mostly_silence_limit:
             if status != "rejected":
                 status = "review"
             score -= 25
@@ -289,4 +296,9 @@ class AudioQualityAnalyzer:
     def _silence_limit(self, quality_baseline: AudioQualityReference | None) -> float:
         if quality_baseline is None or quality_baseline.silence_ratio is None:
             return 0.65
-        return min(0.9, max(0.65, quality_baseline.silence_ratio + 0.15))
+        return min(0.995, max(0.65, quality_baseline.silence_ratio + 0.15))
+
+    def _mostly_silence_limit(self, baseline_silence: float | None) -> float:
+        if baseline_silence is None:
+            return 0.92
+        return min(0.995, max(0.92, baseline_silence + 0.03))

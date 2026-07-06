@@ -472,6 +472,22 @@ def test_audio_journal_uploaded_baseline_can_make_current_environment_usable(cli
     assert metadata["baseline_id"] == baseline["id"]
 
 
+def test_audio_journal_high_silence_take_matching_baseline_is_usable(client, tmp_path: Path) -> None:
+    baseline = create_baseline(client, tmp_path, audio=mostly_silent_wav_bytes())
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=mostly_silent_wav_bytes(),
+        transcript_text="This matches the uploaded baseline recording.",
+    )
+
+    take = payload["take"]
+    assert baseline["silence_ratio"] == take["silence_ratio"]
+    assert take["quality_status"] == "usable"
+    assert "mostly_silence" not in take["quality_reasons_json"]
+    assert "quality_baseline_applied" in take["quality_reasons_json"]
+
+
 def test_audio_journal_mostly_silent_take_reviews_even_with_silent_baseline(client, tmp_path: Path) -> None:
     create_baseline(client, tmp_path, audio=sparse_home_recording_wav_bytes())
     payload = create_entry(
