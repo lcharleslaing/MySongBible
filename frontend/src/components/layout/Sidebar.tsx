@@ -6,6 +6,7 @@ const navItems = [
   { to: "/audio-journal", label: "Audio Journal" },
   { to: "/voice-lab", label: "Voice Lab" },
   { to: "/local-ai-setup", label: "Local AI Setup" },
+  { to: "/clone-app", label: "Clone App" },
   { to: "/settings", label: "Settings" },
   { to: "/system-health", label: "System Health" },
 ];

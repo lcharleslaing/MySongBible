@@ -62,6 +62,10 @@ declare global {
         canceled: boolean;
         path: string | null;
       }>;
+      pickCloneDirectory: () => Promise<{
+        canceled: boolean;
+        path: string | null;
+      }>;
     };
   }
 

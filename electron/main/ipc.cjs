@@ -669,6 +669,18 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
     };
   });
 
+  ipcMain.handle("desktop:pick-clone-directory", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select Clone Location",
+      properties: ["openDirectory", "createDirectory"],
+    });
+
+    return {
+      canceled: result.canceled,
+      path: normalizeSelectedPath(result.filePaths),
+    };
+  });
+
 }
 
 module.exports = {

@@ -22,4 +22,5 @@ contextBridge.exposeInMainWorld("desktop", {
   pickPiperModel: () => ipcRenderer.invoke("desktop:pick-piper-model"),
   pickAudioInputDirectory: () => ipcRenderer.invoke("desktop:pick-audio-input-directory"),
   pickAudioOutputDirectory: () => ipcRenderer.invoke("desktop:pick-audio-output-directory"),
+  pickCloneDirectory: () => ipcRenderer.invoke("desktop:pick-clone-directory"),
 });

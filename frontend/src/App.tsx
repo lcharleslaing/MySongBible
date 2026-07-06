@@ -6,6 +6,7 @@ import { VoiceLabPage } from "./pages/VoiceLabPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SystemHealthPage } from "./pages/SystemHealthPage";
 import { LocalAiSetupPage } from "./pages/LocalAiSetupPage";
+import { AppClonerPage } from "./pages/AppClonerPage";
 import { AppDefinitionProvider } from "./context/AppDefinitionContext";
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="/audio-journal" element={<AudioJournalPage />} />
           <Route path="/voice-lab" element={<VoiceLabPage />} />
           <Route path="/local-ai-setup" element={<LocalAiSetupPage />} />
+          <Route path="/clone-app" element={<AppClonerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/system-health" element={<SystemHealthPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
