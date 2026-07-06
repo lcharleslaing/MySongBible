@@ -64,6 +64,14 @@ class SttService:
 
         return transcript
 
+    def transcribe_audio_path(self, audio_file_path: Path, *, language: str | None = None):
+        transcription_audio_path = self._prepare_transcription_audio(audio_file_path)
+        try:
+            return self.transcriber.transcribe(transcription_audio_path, language=language)
+        finally:
+            if transcription_audio_path != audio_file_path:
+                transcription_audio_path.unlink(missing_ok=True)
+
     def _save_upload(self, upload_file: UploadFile) -> Path:
         return self.save_upload_to_directory(upload_file, self.settings.audio_input_dir)
 

@@ -11,8 +11,9 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session
 
 from app.api.dependencies import get_app_settings
-from app.api.routes.audio_journal import get_audio_journal_take_audio
+from app.api.routes.audio_journal import get_audio_journal_take_audio, get_audio_journal_transcription_service
 from app.core.config import Settings
+from app.local_ai.stt.whisper_cpp import WhisperCppError, WhisperCppTranscriptionResult
 from app.models.audio_journal import AudioJournalTake
 from app.services.audio_journal import AudioJournalService
 
@@ -67,6 +68,48 @@ def create_entry(client, tmp_path: Path, *, audio: bytes | None = None, filename
     )
     assert response.status_code == 201
     return response.json()
+
+
+class FakeWhisperTranscriber:
+    def __init__(self, text: str = "mock journal transcript", error: WhisperCppError | None = None) -> None:
+        self.text = text
+        self.error = error
+        self.last_audio_path: Path | None = None
+        self.last_language: str | None = None
+
+    def transcribe(self, audio_file_path: Path, language: str | None = None) -> WhisperCppTranscriptionResult:
+        self.last_audio_path = audio_file_path
+        self.last_language = language
+        if self.error:
+            raise self.error
+        return WhisperCppTranscriptionResult(
+            text=self.text,
+            stdout="ok",
+            stderr="",
+            command=["whisper-cli"],
+        )
+
+
+def override_transcription_service(client, tmp_path: Path, transcriber: FakeWhisperTranscriber):
+    async def override_service():
+        with Session(client.engine) as session:
+            yield AudioJournalService(
+                session=session,
+                settings=Settings(
+                    app_data_dir=tmp_path / "app-data",
+                    whisper_model_path=tmp_path / "ggml-base.en.bin",
+                ),
+                transcriber=transcriber,
+            )
+
+    client.app.dependency_overrides[get_audio_journal_transcription_service] = override_service
+
+
+def transcribe_take(client, tmp_path: Path, entry_id: int, take_id: int, transcriber: FakeWhisperTranscriber):
+    override_transcription_service(client, tmp_path, transcriber)
+    response = client.post(f"/api/audio-journal/{entry_id}/takes/{take_id}/transcribe")
+    client.app.dependency_overrides.pop(get_audio_journal_transcription_service, None)
+    return response
 
 
 def test_audio_journal_create_entry_from_upload_creates_active_take(client, tmp_path: Path) -> None:
@@ -277,3 +320,154 @@ def test_audio_journal_quality_usable_with_transcript_marks_training_candidate(c
     assert update_response.status_code == 200
     assert update_response.json()["quality_status"] == "usable"
     assert update_response.json()["is_training_candidate"] is True
+
+
+def test_audio_journal_transcribe_updates_take_transcript_status_and_engine(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path)
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("Today I recorded a local journal."))
+
+    assert response.status_code == 200
+    take = response.json()["take"]
+    assert take["transcript_text"] == "Today I recorded a local journal."
+    assert take["transcription_status"] == "completed"
+    assert take["transcription_engine"] == "whisper.cpp"
+    assert take["transcription_model"] == "ggml-base.en.bin"
+
+
+def test_audio_journal_original_transcription_sets_entry_original_transcript_and_script_when_blank(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path)
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("Original spoken journal."))
+
+    assert response.status_code == 200
+    entry = response.json()["entry"]
+    assert entry["original_transcript_text"] == "Original spoken journal."
+    assert entry["script_text"] == "Original spoken journal."
+
+
+def test_audio_journal_transcription_does_not_overwrite_existing_script_text(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path, transcript_text="Existing edited script.")
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("New whisper transcript."))
+
+    assert response.status_code == 200
+    assert response.json()["entry"]["script_text"] == "Existing edited script."
+
+
+def test_audio_journal_failed_transcription_marks_take_failed(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path)
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+    error = WhisperCppError("whisper failure", status_code=502, stdout="out", stderr="err")
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber(error=error))
+
+    assert response.status_code == 502
+    with Session(client.engine) as session:
+        take = session.get(AudioJournalTake, take_id)
+        assert take is not None
+        assert take.transcription_status == "failed"
+        assert take.is_training_candidate is False
+        assert "whisper failure" in (take.metadata_json or "")
+
+
+def test_audio_journal_transcribe_missing_audio_file_returns_404(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path)
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+    Path(payload["take"]["audio_path"]).unlink()
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber())
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Audio file not found."
+
+
+def test_audio_journal_transcript_with_usable_quality_marks_training_candidate_and_selected_take(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path)
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("Training ready transcript."))
+
+    assert response.status_code == 200
+    assert response.json()["take"]["quality_status"] == "usable"
+    assert response.json()["take"]["is_training_candidate"] is True
+    assert response.json()["entry"]["selected_training_take_id"] == take_id
+
+
+def test_audio_journal_transcript_with_review_quality_does_not_mark_training_candidate(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path, audio=wav_bytes(duration_seconds=1))
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("Short clip transcript."))
+
+    assert response.status_code == 200
+    assert response.json()["take"]["quality_status"] == "review"
+    assert response.json()["take"]["is_training_candidate"] is False
+    assert response.json()["entry"]["selected_training_take_id"] is None
+
+
+def test_audio_journal_rerecord_transcription_computes_script_match_score(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path, transcript_text="Please read this exact local journal script.")
+    entry_id = payload["entry"]["id"]
+    rerecord_response = client.post(
+        f"/api/audio-journal/{entry_id}/takes",
+        files={"audio_file": ("rerecord.wav", BytesIO(wav_bytes()), "audio/wav")},
+        data={"take_type": "rerecord"},
+    )
+    take_id = rerecord_response.json()["id"]
+
+    response = transcribe_take(
+        client,
+        tmp_path,
+        entry_id,
+        take_id,
+        FakeWhisperTranscriber("Please read this exact local journal script."),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["take"]["script_match_score"] == 100
+    assert response.json()["take"]["is_training_candidate"] is True
+
+
+def test_audio_journal_low_script_match_prevents_automatic_training_candidate(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path, transcript_text="Please read this exact local journal script.")
+    entry_id = payload["entry"]["id"]
+    rerecord_response = client.post(
+        f"/api/audio-journal/{entry_id}/takes",
+        files={"audio_file": ("rerecord.wav", BytesIO(wav_bytes()), "audio/wav")},
+        data={"take_type": "rerecord"},
+    )
+    take_id = rerecord_response.json()["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("Completely different words."))
+
+    assert response.status_code == 200
+    take = response.json()["take"]
+    assert take["script_match_score"] < 85
+    assert take["is_training_candidate"] is False
+    assert "Transcript differs from script" in (take["metadata_json"] or "")
+
+
+def test_audio_journal_transcribe_rejects_take_from_different_entry(client, tmp_path: Path) -> None:
+    first = create_entry(client, tmp_path)
+    second = create_entry(client, tmp_path)
+
+    response = transcribe_take(
+        client,
+        tmp_path,
+        first["entry"]["id"],
+        second["take"]["id"],
+        FakeWhisperTranscriber("Wrong entry transcript."),
+    )
+
+    assert response.status_code == 404

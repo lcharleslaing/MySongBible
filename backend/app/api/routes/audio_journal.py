@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse, Response
 from sqlmodel import Session
 
-from app.api.dependencies import get_app_settings, get_session
+from app.api.dependencies import get_app_settings, get_session, get_settings_service
 from app.core.config import Settings
+from app.local_ai.stt.whisper_cpp import WhisperCppError, WhisperCppTranscriber
 from app.schemas.audio_journal import (
     AudioJournalEntryCreate,
     AudioJournalEntryRead,
@@ -18,6 +19,7 @@ from app.schemas.audio_journal import (
     AudioJournalUploadResponse,
 )
 from app.services.audio_journal import AudioJournalError, AudioJournalService
+from app.services.settings import SettingsService
 from app.services.stt import SttUploadError
 
 router = APIRouter(tags=["audio-journal"])
@@ -46,8 +48,31 @@ async def get_audio_journal_service(
     return AudioJournalService(session=session, settings=settings)
 
 
+async def get_audio_journal_transcription_service(
+    session: Session = Depends(get_session),
+    settings_service: SettingsService = Depends(get_settings_service),
+) -> AudioJournalService:
+    runtime_settings = settings_service.get_runtime_settings()
+    return AudioJournalService(
+        session=session,
+        settings=runtime_settings,
+        transcriber=WhisperCppTranscriber(runtime_settings),
+    )
+
+
 def handle_audio_journal_error(error: AudioJournalError | SttUploadError) -> HTTPException:
     return HTTPException(status_code=error.status_code, detail=error.message)
+
+
+def handle_whisper_error(error: WhisperCppError) -> HTTPException:
+    return HTTPException(
+        status_code=error.status_code,
+        detail={
+            "message": error.message,
+            "stdout": error.stdout,
+            "stderr": error.stderr,
+        },
+    )
 
 
 @router.get("/audio-journal", response_model=AudioJournalListResponse)
@@ -209,6 +234,27 @@ async def analyze_audio_journal_take_quality(
         return AudioJournalTakeRead.model_validate(service.analyze_take_quality(entry_id, take_id))
     except AudioJournalError as error:
         raise handle_audio_journal_error(error) from error
+
+
+@router.post("/audio-journal/{entry_id}/takes/{take_id}/transcribe", response_model=AudioJournalUploadResponse)
+async def transcribe_audio_journal_take(
+    entry_id: int,
+    take_id: int,
+    language: str | None = None,
+    service: AudioJournalService = Depends(get_audio_journal_transcription_service),
+) -> AudioJournalUploadResponse:
+    try:
+        take = service.transcribe_take(entry_id, take_id, language=language)
+        return AudioJournalUploadResponse(
+            entry=serialize_entry(service, entry_id),
+            take=AudioJournalTakeRead.model_validate(take),
+        )
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+    except SttUploadError as error:
+        raise handle_audio_journal_error(error) from error
+    except WhisperCppError as error:
+        raise handle_whisper_error(error) from error
 
 
 @router.post("/audio-journal/{entry_id}/takes/{take_id}/set-active", response_model=AudioJournalTakeRead)

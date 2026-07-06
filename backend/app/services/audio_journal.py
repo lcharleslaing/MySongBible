@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 import json
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from fastapi import UploadFile
 from sqlmodel import Session, select
 
 from app.core.config import Settings
-from app.local_ai.stt.whisper_cpp import WhisperCppTranscriber
+from app.local_ai.stt.whisper_cpp import WhisperCppError, WhisperCppTranscriber
 from app.models.audio_journal import AudioJournalEntry, AudioJournalTake
 from app.schemas.audio_journal import (
     AudioJournalEntryCreate,
@@ -18,7 +19,7 @@ from app.schemas.audio_journal import (
     AudioJournalTrainingCandidateUpdate,
 )
 from app.services.audio_quality import AudioQualityAnalyzer
-from app.services.stt import SttService
+from app.services.stt import SttService, SttUploadError
 
 
 def utc_now() -> datetime:
@@ -218,6 +219,53 @@ class AudioJournalService:
         self.session.refresh(take)
         return take
 
+    def transcribe_take(self, entry_id: int, take_id: int, *, language: str | None = None) -> AudioJournalTake:
+        entry = self.get_entry(entry_id)
+        take = self.get_take(entry_id, take_id)
+        audio_path = Path(take.audio_path).resolve()
+        if not self._is_inside_journal_storage(audio_path):
+            raise AudioJournalError("Invalid audio path.", status_code=400)
+        if not audio_path.exists() or not audio_path.is_file():
+            raise AudioJournalError("Audio file not found.", status_code=404)
+        if self.transcriber is None:
+            raise AudioJournalError("Whisper transcriber is not configured.", status_code=400)
+
+        stt_service = SttService(session=self.session, settings=self.settings, transcriber=self.transcriber)
+        try:
+            transcription = stt_service.transcribe_audio_path(audio_path, language=language)
+        except (WhisperCppError, SttUploadError) as error:
+            take.transcription_status = "failed"
+            take.is_training_candidate = False
+            take.metadata_json = self._merge_metadata(take.metadata_json, {"transcription_error": self._error_message(error)})
+            self.session.add(take)
+            self.session.commit()
+            self.session.refresh(take)
+            raise
+
+        transcript_text = transcription.text.strip()
+        take.transcript_text = transcript_text
+        take.transcript_source = "whisper"
+        take.transcription_status = "completed"
+        take.transcription_engine = "whisper.cpp"
+        take.transcription_model = self.settings.whisper_model_path.name if self.settings.whisper_model_path else None
+
+        if transcript_text and take.take_type == "original" and not (entry.original_transcript_text or "").strip():
+            entry.original_transcript_text = transcript_text
+        if transcript_text and not (entry.script_text or "").strip():
+            entry.script_text = transcript_text
+
+        self._update_script_match_score(take, entry)
+        self._apply_training_candidate_rules(take, entry, manual_override=False)
+        if take.is_training_candidate and entry.selected_training_take_id is None:
+            entry.selected_training_take_id = take.id
+        self._refresh_entry_status(entry)
+        entry.updated_at = utc_now()
+        self.session.add(take)
+        self.session.add(entry)
+        self.session.commit()
+        self.session.refresh(take)
+        return take
+
     def update_training_candidate(
         self,
         entry_id: int,
@@ -289,7 +337,8 @@ class AudioJournalService:
 
     def _can_auto_mark_training_candidate(self, take: AudioJournalTake, entry: AudioJournalEntry) -> bool:
         has_text = bool((take.transcript_text or "").strip() or (entry.script_text or "").strip())
-        return take.quality_status == "usable" and has_text
+        match_ok = take.script_match_score is None or take.script_match_score >= 85
+        return take.quality_status == "usable" and has_text and match_ok
 
     def _apply_training_candidate_rules(
         self,
@@ -311,6 +360,26 @@ class AudioJournalService:
         best = selected or active or next((take for take in takes if take.quality_status == "usable"), None)
         entry.overall_quality_status = best.quality_status if best else "unknown"
 
+    def _update_script_match_score(self, take: AudioJournalTake, entry: AudioJournalEntry) -> None:
+        transcript = (take.transcript_text or "").strip()
+        script = (entry.script_text or "").strip()
+        if take.take_type != "rerecord" or not transcript or not script:
+            return
+        score = round(SequenceMatcher(None, self._normalize_text(script), self._normalize_text(transcript)).ratio() * 100, 2)
+        take.script_match_score = score
+        if score < 85:
+            take.metadata_json = self._merge_metadata(
+                take.metadata_json,
+                {
+                    "script_match_warning": "Transcript differs from script; review before training.",
+                    "script_match_status": "not_training_ready" if score < 70 else "review",
+                },
+            )
+
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        return " ".join(value.lower().split())
+
     def list_takes_without_entry_check(self, entry_id: int) -> list[AudioJournalTake]:
         statement = select(AudioJournalTake).where(AudioJournalTake.entry_id == entry_id).order_by(AudioJournalTake.take_number)
         return list(self.session.exec(statement))
@@ -326,3 +395,17 @@ class AudioJournalService:
         if reason:
             metadata["training_candidate_override_reason"] = reason
         return json.dumps(metadata)
+
+    def _merge_metadata(self, metadata_json: str | None, updates: dict[str, object]) -> str:
+        try:
+            metadata = json.loads(metadata_json) if metadata_json else {}
+            if not isinstance(metadata, dict):
+                metadata = {"previous_metadata": metadata}
+        except json.JSONDecodeError:
+            metadata = {"previous_metadata": metadata_json}
+        metadata.update(updates)
+        return json.dumps(metadata)
+
+    @staticmethod
+    def _error_message(error: Exception) -> str:
+        return getattr(error, "message", str(error))
