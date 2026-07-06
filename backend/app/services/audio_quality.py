@@ -4,6 +4,9 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import shutil
+from subprocess import run
+import tempfile
 import wave
 
 from app.schemas.audio_journal import AudioQualityMetrics
@@ -23,14 +26,25 @@ class AudioQualityAnalyzer:
     def analyze(self, audio_path: Path, *, has_training_text: bool = False) -> AudioQualityMetrics:
         suffix = audio_path.suffix.lower().lstrip(".")
         if suffix != "wav":
-            return AudioQualityMetrics(
-                file_format=suffix or None,
-                quality_status="review",
-                quality_score=40,
-                quality_summary="Quality analysis is currently heuristic and only measures WAV files fully.",
-                quality_reasons_json=json.dumps(["non_wav_analysis_limited"]),
-            )
+            converted_path = self._convert_to_analysis_wav(audio_path)
+            if converted_path is None:
+                return AudioQualityMetrics(
+                    file_format=suffix or None,
+                    quality_status="review",
+                    quality_score=40,
+                    quality_summary="Quality analysis needs ffmpeg to measure this audio format.",
+                    quality_reasons_json=json.dumps(["non_wav_analysis_requires_ffmpeg"]),
+                )
+            try:
+                metrics = self._analyze_wav(converted_path, has_training_text=has_training_text)
+                metrics.file_format = suffix or metrics.file_format
+                return metrics
+            finally:
+                converted_path.unlink(missing_ok=True)
 
+        return self._analyze_wav(audio_path, has_training_text=has_training_text)
+
+    def _analyze_wav(self, audio_path: Path, *, has_training_text: bool) -> AudioQualityMetrics:
         try:
             decoded = self._decode_wav(audio_path)
         except (wave.Error, EOFError, ValueError) as error:
@@ -119,6 +133,36 @@ class AudioQualityAnalyzer:
             silence_ratio=round(silence_ratio, 4),
             snr_estimate_db=snr,
         )
+
+    def _convert_to_analysis_wav(self, audio_path: Path) -> Path | None:
+        ffmpeg_path = shutil.which("ffmpeg")
+        if not ffmpeg_path:
+            return None
+
+        temp_file = tempfile.NamedTemporaryFile(prefix="audio-quality-", suffix=".wav", delete=False)
+        converted_path = Path(temp_file.name)
+        temp_file.close()
+        completed = run(
+            [
+                ffmpeg_path,
+                "-y",
+                "-i",
+                str(audio_path),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-vn",
+                str(converted_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            converted_path.unlink(missing_ok=True)
+            return None
+        return converted_path
 
     def _decode_wav(self, audio_path: Path) -> DecodedWav:
         with wave.open(str(audio_path), "rb") as wav_file:

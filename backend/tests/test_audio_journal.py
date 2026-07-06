@@ -278,13 +278,37 @@ def test_audio_journal_paused_home_recording_remains_usable(client, tmp_path: Pa
     assert "moderate_silence_ratio" in take["quality_reasons_json"]
 
 
-def test_audio_journal_non_wav_returns_review_gracefully(client, tmp_path: Path) -> None:
+def test_audio_journal_non_wav_returns_review_when_ffmpeg_missing(client, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("app.services.audio_quality.shutil.which", lambda name: None)
+
     payload = create_entry(client, tmp_path, audio=b"not really webm", filename="journal.webm")
     take = payload["take"]
 
     assert take["file_format"] == "webm"
     assert take["quality_status"] == "review"
-    assert "non_wav_analysis_limited" in take["quality_reasons_json"]
+    assert "non_wav_analysis_requires_ffmpeg" in take["quality_reasons_json"]
+
+
+def test_audio_journal_non_wav_converts_for_quality_analysis(client, tmp_path: Path, monkeypatch) -> None:
+    def fake_run(command, **kwargs):
+        output_path = Path(command[-1])
+        output_path.write_bytes(wav_bytes())
+        return CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.services.audio_quality.shutil.which", lambda name: "/usr/bin/ffmpeg" if name == "ffmpeg" else None)
+    monkeypatch.setattr("app.services.audio_quality.run", fake_run)
+
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=b"mp3",
+        filename="journal.mp3",
+        transcript_text="A clear converted journal recording.",
+    )
+    take = payload["take"]
+
+    assert take["file_format"] == "mp3"
+    assert take["quality_status"] == "usable"
 
 
 def test_audio_journal_audio_route_serves_file(client, tmp_path: Path) -> None:
