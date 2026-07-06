@@ -151,6 +151,10 @@ class Settings(BaseSettings):
         return self.audio_journal_dir / "processed"
 
     @property
+    def audio_baselines_dir(self) -> Path:
+        return self.app_data_dir / "audio" / "baselines"
+
+    @property
     def voice_dataset_exports_dir(self) -> Path:
         return self.app_data_dir / "exports" / "voice-datasets"
 

@@ -12,7 +12,9 @@ from app.schemas.audio_journal import (
     AudioJournalEntryRead,
     AudioJournalEntryUpdate,
     AudioJournalListResponse,
-    AudioJournalRecordingAtmosphere,
+    AudioQualityBaselineListResponse,
+    AudioQualityBaselineRead,
+    AudioQualityBaselineUpdate,
     AudioJournalTakeCreate,
     AudioJournalTakeRead,
     AudioJournalTakeUpdate,
@@ -85,11 +87,100 @@ async def list_audio_journal_entries(
     )
 
 
-@router.get("/audio-journal/recording-atmosphere", response_model=AudioJournalRecordingAtmosphere | None)
-async def get_audio_journal_recording_atmosphere(
+@router.get("/audio-journal/baselines", response_model=AudioQualityBaselineListResponse)
+async def list_audio_quality_baselines(
     service: AudioJournalService = Depends(get_audio_journal_service),
-) -> AudioJournalRecordingAtmosphere | None:
-    return service.get_recording_atmosphere()
+) -> AudioQualityBaselineListResponse:
+    return AudioQualityBaselineListResponse(items=service.list_baselines())
+
+
+@router.get("/audio-journal/baselines/{baseline_id}", response_model=AudioQualityBaselineRead)
+async def get_audio_quality_baseline(
+    baseline_id: int,
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> AudioQualityBaselineRead:
+    try:
+        return AudioQualityBaselineRead.model_validate(service.get_baseline(baseline_id))
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+
+
+@router.post("/audio-journal/baselines", response_model=AudioQualityBaselineRead, status_code=status.HTTP_201_CREATED)
+async def create_audio_quality_baseline(
+    audio_file: UploadFile = File(...),
+    name: str = Form(...),
+    notes: str | None = Form(default=None),
+    device_label: str | None = Form(default=None),
+    environment_label: str | None = Form(default=None),
+    is_default: bool = Form(default=False),
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> AudioQualityBaselineRead:
+    try:
+        return AudioQualityBaselineRead.model_validate(
+            service.create_baseline(
+                audio_file=audio_file,
+                name=name,
+                notes=notes,
+                device_label=device_label,
+                environment_label=environment_label,
+                is_default=is_default,
+            )
+        )
+    except (AudioJournalError, SttUploadError) as error:
+        raise handle_audio_journal_error(error) from error
+
+
+@router.patch("/audio-journal/baselines/{baseline_id}", response_model=AudioQualityBaselineRead)
+async def update_audio_quality_baseline(
+    baseline_id: int,
+    payload: AudioQualityBaselineUpdate,
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> AudioQualityBaselineRead:
+    try:
+        return AudioQualityBaselineRead.model_validate(service.update_baseline(baseline_id, payload))
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+
+
+@router.delete("/audio-journal/baselines/{baseline_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_audio_quality_baseline(
+    baseline_id: int,
+    delete_audio: bool = False,
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> Response:
+    try:
+        service.delete_baseline(baseline_id, delete_audio=delete_audio)
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/audio-journal/baselines/{baseline_id}/set-default", response_model=AudioQualityBaselineRead)
+async def set_default_audio_quality_baseline(
+    baseline_id: int,
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> AudioQualityBaselineRead:
+    try:
+        return AudioQualityBaselineRead.model_validate(service.set_default_baseline(baseline_id))
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+
+
+@router.get("/audio-journal/baselines/{baseline_id}/audio")
+async def get_audio_quality_baseline_audio(
+    baseline_id: int,
+    service: AudioJournalService = Depends(get_audio_journal_service),
+) -> FileResponse:
+    try:
+        audio_path = service.baseline_audio_path(baseline_id)
+    except AudioJournalError as error:
+        raise handle_audio_journal_error(error) from error
+    return FileResponse(
+        path=audio_path,
+        media_type=MEDIA_TYPES_BY_EXTENSION.get(Path(audio_path).suffix.lower(), "application/octet-stream"),
+        filename=Path(audio_path).name,
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/audio-journal/{entry_id}", response_model=AudioJournalEntryRead)
@@ -240,21 +331,6 @@ async def analyze_audio_journal_take_quality(
 ) -> AudioJournalTakeRead:
     try:
         return AudioJournalTakeRead.model_validate(service.analyze_take_quality(entry_id, take_id))
-    except AudioJournalError as error:
-        raise handle_audio_journal_error(error) from error
-
-
-@router.post(
-    "/audio-journal/{entry_id}/takes/{take_id}/recording-atmosphere",
-    response_model=AudioJournalRecordingAtmosphere,
-)
-async def set_audio_journal_recording_atmosphere(
-    entry_id: int,
-    take_id: int,
-    service: AudioJournalService = Depends(get_audio_journal_service),
-) -> AudioJournalRecordingAtmosphere:
-    try:
-        return service.set_recording_atmosphere_from_take(entry_id, take_id)
     except AudioJournalError as error:
         raise handle_audio_journal_error(error) from error
 

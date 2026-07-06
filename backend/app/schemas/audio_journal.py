@@ -20,22 +20,44 @@ class AudioQualityMetrics(BaseModel):
     snr_estimate_db: float | None = None
 
 
-class AudioJournalRecordingAtmosphere(BaseModel):
-    captured_at: datetime
-    entry_id: int
-    take_id: int
-    take_number: int
-    audio_filename: str
-    duration_seconds: float | None = None
-    sample_rate: int | None = None
-    channels: int | None = None
-    file_format: str | None = None
-    quality_score: float | None = None
-    noise_floor_db: float | None = None
-    rms_db: float | None = None
-    peak_db: float | None = None
-    silence_ratio: float | None = None
-    snr_estimate_db: float | None = None
+class AudioQualityBaselineUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    notes: str | None = None
+    device_label: str | None = Field(default=None, max_length=100)
+    environment_label: str | None = Field(default=None, max_length=100)
+    is_default: bool | None = None
+    metadata_json: str | None = None
+
+
+class AudioQualityBaselineRead(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+    updated_at: datetime
+    source_audio_path: str
+    source_audio_filename: str
+    notes: str | None
+    device_label: str | None
+    environment_label: str | None
+    sample_rate: int | None
+    channels: int | None
+    duration_seconds: float | None
+    file_format: str | None
+    peak_db: float | None
+    rms_db: float | None
+    noise_floor_db: float | None
+    snr_estimate_db: float | None
+    silence_ratio: float | None
+    clipping_detected: bool
+    quality_score: float | None
+    is_default: bool
+    metadata_json: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class AudioQualityBaselineListResponse(BaseModel):
+    items: list[AudioQualityBaselineRead]
 
 
 class AudioJournalEntryCreate(BaseModel):

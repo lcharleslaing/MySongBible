@@ -1,5 +1,6 @@
 from io import BytesIO
 import asyncio
+import json
 import math
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -12,10 +13,14 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session
 
 from app.api.dependencies import get_app_settings
-from app.api.routes.audio_journal import get_audio_journal_take_audio, get_audio_journal_transcription_service
+from app.api.routes.audio_journal import (
+    get_audio_journal_take_audio,
+    get_audio_journal_transcription_service,
+    get_audio_quality_baseline_audio,
+)
 from app.core.config import Settings
 from app.local_ai.stt.whisper_cpp import WhisperCppError, WhisperCppTranscriptionResult
-from app.models.audio_journal import AudioJournalTake
+from app.models.audio_journal import AudioJournalTake, AudioQualityBaseline
 from app.services.audio_journal import AudioJournalService
 
 
@@ -75,6 +80,25 @@ def sparse_home_recording_wav_bytes(*, duration_seconds: float = 10, sample_rate
         for index in range(frame_count):
             second_fraction = (index % sample_rate) / sample_rate
             if second_fraction < 0.2:
+                value = int(0.3 * math.sin(2 * math.pi * 220 * index / sample_rate) * 32767)
+            else:
+                value = 0
+            frames.extend(struct.pack("<h", value))
+        wav_file.writeframes(bytes(frames))
+    return buffer.getvalue()
+
+
+def mostly_silent_wav_bytes(*, duration_seconds: float = 10, sample_rate: int = 16000) -> bytes:
+    buffer = BytesIO()
+    frame_count = int(duration_seconds * sample_rate)
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        frames = bytearray()
+        for index in range(frame_count):
+            second_fraction = (index % sample_rate) / sample_rate
+            if second_fraction < 0.05:
                 value = int(0.3 * math.sin(2 * math.pi * 220 * index / sample_rate) * 32767)
             else:
                 value = 0
@@ -151,6 +175,17 @@ def transcribe_take(client, tmp_path: Path, entry_id: int, take_id: int, transcr
     return response
 
 
+def create_baseline(client, tmp_path: Path, *, name: str = "Desk baseline", is_default: bool = True, audio: bytes | None = None):
+    client.app.dependency_overrides[get_app_settings] = override_settings_for_audio_journal(tmp_path)
+    response = client.post(
+        "/api/audio-journal/baselines",
+        files={"audio_file": ("baseline.wav", BytesIO(audio or wav_bytes()), "audio/wav")},
+        data={"name": name, "is_default": str(is_default).lower()},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
 def test_audio_journal_create_entry_from_upload_creates_active_take(client, tmp_path: Path) -> None:
     payload = create_entry(client, tmp_path)
 
@@ -178,6 +213,81 @@ def test_audio_journal_lists_and_gets_entry_with_takes(client, tmp_path: Path) -
     entry = get_response.json()
     assert entry["id"] == entry_id
     assert len(entry["takes"]) == 1
+
+
+def test_audio_journal_upload_baseline_creates_row_and_stores_file(client, tmp_path: Path) -> None:
+    baseline = create_baseline(client, tmp_path, name="Quiet desk", is_default=True)
+
+    assert baseline["name"] == "Quiet desk"
+    assert baseline["is_default"] is True
+    assert baseline["duration_seconds"] is not None
+    assert baseline["quality_score"] is not None
+    assert Path(baseline["source_audio_path"]).exists()
+    assert "/baselines/" in baseline["source_audio_path"]
+
+    list_response = client.get("/api/audio-journal/baselines")
+    assert list_response.status_code == 200
+    assert list_response.json()["items"][0]["id"] == baseline["id"]
+
+
+def test_audio_journal_default_baseline_clears_previous_default(client, tmp_path: Path) -> None:
+    first = create_baseline(client, tmp_path, name="First", is_default=True)
+    second = create_baseline(client, tmp_path, name="Second", is_default=True)
+
+    list_response = client.get("/api/audio-journal/baselines")
+    baselines = {item["id"]: item for item in list_response.json()["items"]}
+
+    assert baselines[first["id"]]["is_default"] is False
+    assert baselines[second["id"]]["is_default"] is True
+
+
+def test_audio_journal_set_default_baseline_endpoint(client, tmp_path: Path) -> None:
+    first = create_baseline(client, tmp_path, name="First", is_default=True)
+    second = create_baseline(client, tmp_path, name="Second", is_default=False)
+
+    response = client.post(f"/api/audio-journal/baselines/{second['id']}/set-default")
+
+    assert response.status_code == 200
+    assert response.json()["is_default"] is True
+    list_response = client.get("/api/audio-journal/baselines")
+    baselines = {item["id"]: item for item in list_response.json()["items"]}
+    assert baselines[first["id"]]["is_default"] is False
+
+
+def test_audio_journal_baseline_audio_route_serves_file(client, tmp_path: Path) -> None:
+    baseline = create_baseline(client, tmp_path)
+
+    with Session(client.engine) as session:
+        service = AudioJournalService(
+            session=session,
+            settings=Settings(app_data_dir=tmp_path / "app-data"),
+        )
+        response = asyncio.run(get_audio_quality_baseline_audio(baseline["id"], service))  # type: ignore[arg-type]
+
+    assert isinstance(response, FileResponse)
+    assert response.media_type == "audio/wav"
+    assert Path(response.path).read_bytes().startswith(b"RIFF")
+
+
+def test_audio_journal_baseline_audio_route_blocks_unsafe_path(client, tmp_path: Path) -> None:
+    baseline = create_baseline(client, tmp_path)
+
+    with Session(client.engine) as session:
+        stored = session.get(AudioQualityBaseline, baseline["id"])
+        assert stored is not None
+        stored.source_audio_path = "/etc/passwd"
+        session.add(stored)
+        session.commit()
+
+    with Session(client.engine) as session:
+        service = AudioJournalService(
+            session=session,
+            settings=Settings(app_data_dir=tmp_path / "app-data"),
+        )
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(get_audio_quality_baseline_audio(baseline["id"], service))  # type: ignore[arg-type]
+
+    assert error.value.status_code == 400
 
 
 def test_audio_journal_create_import_and_rerecord_takes_increment_and_preserve_entry_dates(client, tmp_path: Path) -> None:
@@ -268,6 +378,47 @@ def test_audio_journal_analyzes_simple_generated_wav(client, tmp_path: Path) -> 
     assert take["quality_status"] == "usable"
 
 
+def test_audio_journal_take_analysis_with_baseline_stores_comparison(client, tmp_path: Path) -> None:
+    baseline = create_baseline(client, tmp_path, audio=wav_bytes(amplitude=0.35))
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=wav_bytes(amplitude=0.34),
+        transcript_text="A clear take near the default baseline.",
+    )
+    take = payload["take"]
+
+    assert take["quality_status"] == "usable"
+    metadata = json.loads(take["metadata_json"])
+    assert metadata["baseline_id"] == baseline["id"]
+    assert metadata["baseline_name"] == baseline["name"]
+    assert "baseline_comparison" in metadata
+    assert "quality_baseline_applied" in take["quality_reasons_json"]
+
+
+def test_audio_journal_take_much_quieter_than_baseline_reviews(client, tmp_path: Path) -> None:
+    create_baseline(client, tmp_path, audio=wav_bytes(amplitude=0.35))
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=wav_bytes(amplitude=0.02),
+        transcript_text="A much quieter take.",
+    )
+    take = payload["take"]
+
+    assert take["quality_status"] == "review"
+    assert "rms_too_low" in take["quality_reasons_json"]
+
+
+def test_audio_journal_clipped_take_rejects_even_with_baseline(client, tmp_path: Path) -> None:
+    create_baseline(client, tmp_path, audio=wav_bytes(amplitude=0.35))
+    payload = create_entry(client, tmp_path, audio=clipped_wav_bytes(), transcript_text="Clipped take.")
+    take = payload["take"]
+
+    assert take["clipping_detected"] is True
+    assert take["quality_status"] == "rejected"
+
+
 def test_audio_journal_detects_clipping_on_generated_wav(client, tmp_path: Path) -> None:
     payload = create_entry(client, tmp_path, audio=clipped_wav_bytes())
     take = payload["take"]
@@ -297,7 +448,7 @@ def test_audio_journal_paused_home_recording_remains_usable(client, tmp_path: Pa
     assert "moderate_silence_ratio" in take["quality_reasons_json"]
 
 
-def test_audio_journal_recording_atmosphere_baseline_can_make_current_environment_usable(client, tmp_path: Path) -> None:
+def test_audio_journal_uploaded_baseline_can_make_current_environment_usable(client, tmp_path: Path) -> None:
     payload = create_entry(
         client,
         tmp_path,
@@ -310,20 +461,37 @@ def test_audio_journal_recording_atmosphere_baseline_can_make_current_environmen
     assert payload["take"]["quality_status"] == "review"
     assert "very_high_silence_ratio" in payload["take"]["quality_reasons_json"]
 
-    set_response = client.post(f"/api/audio-journal/{entry_id}/takes/{take_id}/recording-atmosphere")
-    assert set_response.status_code == 200
-    atmosphere = set_response.json()
-    assert atmosphere["entry_id"] == entry_id
-    assert atmosphere["take_id"] == take_id
+    baseline = create_baseline(client, tmp_path, audio=sparse_home_recording_wav_bytes())
+    response = client.post(f"/api/audio-journal/{entry_id}/takes/{take_id}/analyze-quality")
 
-    get_response = client.get("/api/audio-journal/recording-atmosphere")
-    assert get_response.status_code == 200
-    assert get_response.json()["take_id"] == take_id
-
-    take_response = client.get(f"/api/audio-journal/{entry_id}/takes/{take_id}")
-    take = take_response.json()
+    assert response.status_code == 200
+    take = response.json()
     assert take["quality_status"] == "usable"
-    assert "recording_atmosphere_baseline_applied" in take["quality_reasons_json"]
+    assert "quality_baseline_applied" in take["quality_reasons_json"]
+    metadata = json.loads(take["metadata_json"])
+    assert metadata["baseline_id"] == baseline["id"]
+
+
+def test_audio_journal_mostly_silent_take_reviews_even_with_silent_baseline(client, tmp_path: Path) -> None:
+    create_baseline(client, tmp_path, audio=sparse_home_recording_wav_bytes())
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=sparse_home_recording_wav_bytes(duration_seconds=10, sample_rate=16000),
+        transcript_text="This should still need review.",
+    )
+
+    take = payload["take"]
+    assert take["quality_status"] == "usable"
+
+    payload = create_entry(
+        client,
+        tmp_path,
+        audio=mostly_silent_wav_bytes(),
+        transcript_text="This should still need review.",
+    )
+    assert payload["take"]["quality_status"] == "review"
+    assert "mostly_silence" in payload["take"]["quality_reasons_json"]
 
 
 def test_audio_journal_non_wav_returns_review_when_ffmpeg_missing(client, tmp_path: Path, monkeypatch) -> None:

@@ -52,23 +52,43 @@ export type AudioJournalEntryRecord = {
   takes: AudioJournalTakeRecord[];
 };
 
-export type AudioJournalRecordingAtmosphereRecord = {
-  captured_at: string;
-  entry_id: number;
-  take_id: number;
-  take_number: number;
-  audio_filename: string;
-  duration_seconds: number | null;
+export type AudioQualityBaselineRecord = {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  source_audio_path: string;
+  source_audio_filename: string;
+  notes: string | null;
+  device_label: string | null;
+  environment_label: string | null;
   sample_rate: number | null;
   channels: number | null;
+  duration_seconds: number | null;
   file_format: string | null;
-  quality_score: number | null;
-  noise_floor_db: number | null;
-  rms_db: number | null;
   peak_db: number | null;
-  silence_ratio: number | null;
+  rms_db: number | null;
+  noise_floor_db: number | null;
   snr_estimate_db: number | null;
+  silence_ratio: number | null;
+  clipping_detected: boolean;
+  quality_score: number | null;
+  is_default: boolean;
+  metadata_json: string | null;
 };
+
+export type AudioQualityBaselineListResponse = {
+  items: AudioQualityBaselineRecord[];
+};
+
+export type AudioQualityBaselineUpdatePayload = Partial<{
+  name: string;
+  notes: string | null;
+  device_label: string | null;
+  environment_label: string | null;
+  is_default: boolean;
+  metadata_json: string | null;
+}>;
 
 export type AudioJournalEntryUpdatePayload = Partial<{
   title: string;
@@ -125,9 +145,52 @@ export async function getAudioJournalEntry(entryId: number) {
   return parseJsonResponse<AudioJournalEntryRecord>(response);
 }
 
-export async function getAudioJournalRecordingAtmosphere() {
-  const response = await fetch(await buildApiUrl("/api/audio-journal/recording-atmosphere"));
-  return parseJsonResponse<AudioJournalRecordingAtmosphereRecord | null>(response);
+export async function listAudioQualityBaselines() {
+  const response = await fetch(await buildApiUrl("/api/audio-journal/baselines"));
+  return parseJsonResponse<AudioQualityBaselineListResponse>(response);
+}
+
+export async function createAudioQualityBaseline(formData: FormData) {
+  const response = await fetch(await buildApiUrl("/api/audio-journal/baselines"), {
+    method: "POST",
+    body: formData,
+  });
+
+  return parseJsonResponse<AudioQualityBaselineRecord>(response);
+}
+
+export async function updateAudioQualityBaseline(baselineId: number, payload: AudioQualityBaselineUpdatePayload) {
+  const response = await fetch(await buildApiUrl(`/api/audio-journal/baselines/${baselineId}`), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse<AudioQualityBaselineRecord>(response);
+}
+
+export async function deleteAudioQualityBaseline(baselineId: number) {
+  const response = await fetch(await buildApiUrl(`/api/audio-journal/baselines/${baselineId}?delete_audio=true`), {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    await parseJsonResponse(response);
+  }
+}
+
+export async function setDefaultAudioQualityBaseline(baselineId: number) {
+  const response = await fetch(await buildApiUrl(`/api/audio-journal/baselines/${baselineId}/set-default`), {
+    method: "POST",
+  });
+
+  return parseJsonResponse<AudioQualityBaselineRecord>(response);
+}
+
+export async function buildAudioQualityBaselineAudioUrl(baselineId: number) {
+  return buildApiUrl(`/api/audio-journal/baselines/${baselineId}/audio`);
 }
 
 export async function createAudioJournalEntry(formData: FormData) {
@@ -215,14 +278,6 @@ export async function analyzeAudioJournalTake(entryId: number, takeId: number) {
   });
 
   return parseJsonResponse<AudioJournalTakeRecord>(response);
-}
-
-export async function setAudioJournalRecordingAtmosphere(entryId: number, takeId: number) {
-  const response = await fetch(await buildApiUrl(`/api/audio-journal/${entryId}/takes/${takeId}/recording-atmosphere`), {
-    method: "POST",
-  });
-
-  return parseJsonResponse<AudioJournalRecordingAtmosphereRecord>(response);
 }
 
 export async function setActiveAudioJournalTake(entryId: number, takeId: number) {

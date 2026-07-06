@@ -4,18 +4,21 @@ import { ApiError } from "../api/client";
 import {
   analyzeAudioJournalTake,
   AudioJournalEntryRecord,
-  AudioJournalRecordingAtmosphereRecord,
+  AudioQualityBaselineRecord,
   AudioJournalTakeRecord,
+  buildAudioQualityBaselineAudioUrl,
   buildAudioJournalTakeAudioUrl,
+  createAudioQualityBaseline,
   createAudioJournalEntry,
   createAudioJournalTake,
+  deleteAudioQualityBaseline,
   deleteAudioJournalEntry,
   deleteAudioJournalTake,
   getAudioJournalEntry,
-  getAudioJournalRecordingAtmosphere,
+  listAudioQualityBaselines,
   listAudioJournalEntries,
   setActiveAudioJournalTake,
-  setAudioJournalRecordingAtmosphere,
+  setDefaultAudioQualityBaseline,
   setAudioJournalTrainingCandidate,
   transcribeAudioJournalTake,
   updateAudioJournalEntry,
@@ -39,6 +42,8 @@ type EntryFormState = {
 
 type WorkingAction =
   | "create-entry"
+  | "create-baseline"
+  | "delete-baseline"
   | "save-entry"
   | "delete-entry"
   | "create-take"
@@ -46,7 +51,7 @@ type WorkingAction =
   | "delete-take"
   | "transcribe"
   | "analyze"
-  | "recording-atmosphere"
+  | "set-default-baseline"
   | "set-active"
   | "training-candidate";
 
@@ -117,6 +122,19 @@ function parseReasons(value: string | null | undefined) {
   }
 
   return [value];
+}
+
+function parseMetadata(value: string | null | undefined) {
+  if (!value) {
+    return {} as Record<string, unknown>;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }
 
 function takeLabel(take: AudioJournalTakeRecord | null | undefined) {
@@ -201,7 +219,14 @@ export function AudioJournalPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [takeAudioUrl, setTakeAudioUrl] = useState("");
-  const [recordingAtmosphere, setRecordingAtmosphere] = useState<AudioJournalRecordingAtmosphereRecord | null>(null);
+  const [baselines, setBaselines] = useState<AudioQualityBaselineRecord[]>([]);
+  const [baselineAudioUrls, setBaselineAudioUrls] = useState<Record<number, string>>({});
+  const [baselineFile, setBaselineFile] = useState<File | null>(null);
+  const [baselineName, setBaselineName] = useState("");
+  const [baselineDeviceLabel, setBaselineDeviceLabel] = useState("");
+  const [baselineEnvironmentLabel, setBaselineEnvironmentLabel] = useState("");
+  const [baselineNotes, setBaselineNotes] = useState("");
+  const [baselineIsDefault, setBaselineIsDefault] = useState(true);
   const [isTeleprompterOpen, setIsTeleprompterOpen] = useState(false);
   const [teleprompterScript, setTeleprompterScript] = useState("");
   const [teleprompterCountdown, setTeleprompterCountdown] = useState<number | null>(null);
@@ -341,12 +366,13 @@ export function AudioJournalPage() {
     setErrorMessage("");
 
     try {
-      const [response, atmosphere] = await Promise.all([
+      const [response, baselineResponse] = await Promise.all([
         listAudioJournalEntries(),
-        getAudioJournalRecordingAtmosphere(),
+        listAudioQualityBaselines(),
       ]);
       setEntries(response.items);
-      setRecordingAtmosphere(atmosphere);
+      setBaselines(baselineResponse.items);
+      loadBaselineAudioUrls(baselineResponse.items);
 
       const nextEntry =
         response.items.find((entry) => entry.id === nextSelectedEntryId) ||
@@ -361,6 +387,19 @@ export function AudioJournalPage() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function loadBaselineAudioUrls(nextBaselines: AudioQualityBaselineRecord[]) {
+    const entries = await Promise.all(
+      nextBaselines.map(async (baseline) => [baseline.id, await buildAudioQualityBaselineAudioUrl(baseline.id)] as const),
+    );
+    setBaselineAudioUrls(Object.fromEntries(entries));
+  }
+
+  async function refreshBaselines() {
+    const response = await listAudioQualityBaselines();
+    setBaselines(response.items);
+    await loadBaselineAudioUrls(response.items);
   }
 
   async function refreshSelectedEntry(entryId = selectedEntry?.id, takeId = selectedTakeId) {
@@ -513,13 +552,81 @@ export function AudioJournalPage() {
     });
   }
 
-  async function handleSetRecordingAtmosphere(entryId: number, takeId: number) {
-    await runTakeAction("recording-atmosphere", async () => {
-      const atmosphere = await setAudioJournalRecordingAtmosphere(entryId, takeId);
-      setRecordingAtmosphere(atmosphere);
-      await refreshSelectedEntry(entryId, takeId);
-      setSuccessMessage("Recording atmosphere baseline updated.");
-    });
+  async function handleCreateBaseline() {
+    if (!baselineFile) {
+      setErrorMessage("Choose a baseline audio file first.");
+      return;
+    }
+
+    setWorkingAction("create-baseline");
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const formData = new FormData();
+    formData.append("audio_file", baselineFile, baselineFile.name);
+    formData.append("name", baselineName.trim() || baselineFile.name.replace(/\.[^.]+$/, ""));
+    if (baselineDeviceLabel.trim()) {
+      formData.append("device_label", baselineDeviceLabel.trim());
+    }
+    if (baselineEnvironmentLabel.trim()) {
+      formData.append("environment_label", baselineEnvironmentLabel.trim());
+    }
+    if (baselineNotes.trim()) {
+      formData.append("notes", baselineNotes.trim());
+    }
+    formData.append("is_default", baselineIsDefault ? "true" : "false");
+
+    try {
+      const baseline = await createAudioQualityBaseline(formData);
+      setBaselineFile(null);
+      setBaselineName("");
+      setBaselineDeviceLabel("");
+      setBaselineEnvironmentLabel("");
+      setBaselineNotes("");
+      setBaselineIsDefault(true);
+      await refreshBaselines();
+      setSuccessMessage(`Saved baseline ${baseline.name}.`);
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, "Could not save baseline."));
+    } finally {
+      setWorkingAction("");
+    }
+  }
+
+  async function handleSetDefaultBaseline(baseline: AudioQualityBaselineRecord) {
+    setWorkingAction("set-default-baseline");
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await setDefaultAudioQualityBaseline(baseline.id);
+      await refreshBaselines();
+      setSuccessMessage(`Default baseline set to ${baseline.name}.`);
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, "Could not set default baseline."));
+    } finally {
+      setWorkingAction("");
+    }
+  }
+
+  async function handleDeleteBaseline(baseline: AudioQualityBaselineRecord) {
+    if (!window.confirm(`Delete baseline "${baseline.name}"?`)) {
+      return;
+    }
+
+    setWorkingAction("delete-baseline");
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await deleteAudioQualityBaseline(baseline.id);
+      await refreshBaselines();
+      setSuccessMessage("Baseline deleted.");
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, "Could not delete baseline."));
+    } finally {
+      setWorkingAction("");
+    }
   }
 
   async function handleSetActiveTake(entryId: number, takeId: number) {
@@ -801,6 +908,137 @@ export function AudioJournalPage() {
 
           <div className="card border border-base-300 bg-base-100 shadow-sm">
             <div className="card-body space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="card-title text-xl">Audio Quality Baselines</h2>
+                  <p className="text-sm text-base-content/60">
+                    Default baseline: {baselines.find((baseline) => baseline.is_default)?.name || "None"}
+                  </p>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={refreshBaselines}>
+                  Refresh
+                </button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="form-control">
+                  <span className="label-text">Baseline name</span>
+                  <input
+                    className="input input-bordered"
+                    value={baselineName}
+                    onChange={(event) => setBaselineName(event.target.value)}
+                    placeholder="Best desk recording"
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="label-text">Upload baseline audio</span>
+                  <input
+                    className="file-input file-input-bordered"
+                    type="file"
+                    accept="audio/*"
+                    onChange={(event) => setBaselineFile(event.target.files?.[0] || null)}
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="label-text">Device label</span>
+                  <input
+                    className="input input-bordered"
+                    value={baselineDeviceLabel}
+                    onChange={(event) => setBaselineDeviceLabel(event.target.value)}
+                    placeholder="USB mic"
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="label-text">Environment label</span>
+                  <input
+                    className="input input-bordered"
+                    value={baselineEnvironmentLabel}
+                    onChange={(event) => setBaselineEnvironmentLabel(event.target.value)}
+                    placeholder="Quiet office"
+                  />
+                </label>
+              </div>
+              <label className="form-control">
+                <span className="label-text">Notes</span>
+                <textarea
+                  className="textarea textarea-bordered min-h-20"
+                  value={baselineNotes}
+                  onChange={(event) => setBaselineNotes(event.target.value)}
+                />
+              </label>
+              <label className="label cursor-pointer justify-start gap-3">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-primary"
+                  checked={baselineIsDefault}
+                  onChange={(event) => setBaselineIsDefault(event.target.checked)}
+                />
+                <span className="label-text">Use as default baseline</span>
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!baselineFile || workingAction === "create-baseline"}
+                onClick={handleCreateBaseline}
+              >
+                {workingAction === "create-baseline" ? "Saving..." : "Save Baseline"}
+              </button>
+
+              <div className="space-y-3">
+                {baselines.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                    No baselines saved yet.
+                  </div>
+                ) : null}
+                {baselines.map((baseline) => (
+                  <div key={baseline.id} className="rounded-lg border border-base-300 bg-base-200 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{baseline.name}</h3>
+                        <p className="text-xs text-base-content/60">
+                          {baseline.device_label || "No device"} · {baseline.environment_label || "No environment"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {baseline.is_default ? <span className="badge badge-primary">default</span> : null}
+                        <span className="badge badge-outline">{baseline.file_format || "audio"}</span>
+                      </div>
+                    </div>
+                    {baselineAudioUrls[baseline.id] ? (
+                      <audio className="mt-3 w-full" controls src={baselineAudioUrls[baseline.id]} />
+                    ) : null}
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <span>Score: {formatNumber(baseline.quality_score, "", 0)}</span>
+                      <span>Silence: {formatNumber(baseline.silence_ratio, "", 3)}</span>
+                      <span>RMS: {formatNumber(baseline.rms_db, " dB", 2)}</span>
+                      <span>Noise: {formatNumber(baseline.noise_floor_db, " dB", 2)}</span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={baseline.is_default || workingAction === "set-default-baseline"}
+                        onClick={() => handleSetDefaultBaseline(baseline)}
+                      >
+                        Set Default
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-error btn-outline btn-sm"
+                        disabled={workingAction === "delete-baseline"}
+                        onClick={() => handleDeleteBaseline(baseline)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card border border-base-300 bg-base-100 shadow-sm">
+            <div className="card-body space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="card-title text-xl">Entries</h2>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadEntries()}>
@@ -912,37 +1150,6 @@ export function AudioJournalPage() {
                   {!selectedEntry.script_text?.trim() && !entryForm.scriptText.trim() ? (
                     <div className="alert alert-warning py-2 text-sm">Transcribe or enter script text first.</div>
                   ) : null}
-
-                  <div className="rounded-lg border border-base-300 bg-base-200 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold">Recording atmosphere</h3>
-                        <p className="mt-1 text-sm text-base-content/70">
-                          {recordingAtmosphere
-                            ? `Using Take ${recordingAtmosphere.take_number} from ${formatDate(recordingAtmosphere.captured_at)} as the current baseline.`
-                            : "No baseline set. Pick your cleanest current recording and save it as the atmosphere."}
-                        </p>
-                      </div>
-                      {selectedTake ? (
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          disabled={workingAction === "recording-atmosphere"}
-                          onClick={() => handleSetRecordingAtmosphere(selectedEntry.id, selectedTake.id)}
-                        >
-                          Set Selected Take as Atmosphere
-                        </button>
-                      ) : null}
-                    </div>
-                    {recordingAtmosphere ? (
-                      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                        <span>Silence: {formatNumber(recordingAtmosphere.silence_ratio, "", 3)}</span>
-                        <span>RMS: {formatNumber(recordingAtmosphere.rms_db, " dB", 2)}</span>
-                        <span>Peak: {formatNumber(recordingAtmosphere.peak_db, " dB", 2)}</span>
-                        <span>SNR: {formatNumber(recordingAtmosphere.snr_estimate_db, " dB", 2)}</span>
-                      </div>
-                    ) : null}
-                  </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="form-control">
@@ -1118,14 +1325,6 @@ export function AudioJournalPage() {
                                 <button
                                   type="button"
                                   className="btn btn-xs"
-                                  disabled={workingAction === "recording-atmosphere"}
-                                  onClick={() => handleSetRecordingAtmosphere(selectedEntry.id, take.id)}
-                                >
-                                  Set Atmosphere
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-xs"
                                   disabled={workingAction === "training-candidate"}
                                   onClick={() => handleMarkTrainingCandidate(selectedEntry, take)}
                                 >
@@ -1194,6 +1393,24 @@ export function AudioJournalPage() {
                         <p className="mt-2 text-sm text-base-content/70">
                           {selectedTake.quality_summary || "No quality summary available."}
                         </p>
+                        {(() => {
+                          const metadata = parseMetadata(selectedTake.metadata_json);
+                          const comparison = metadata.baseline_comparison as Record<string, number | null> | undefined;
+                          return metadata.baseline_name ? (
+                            <div className="mt-3 rounded-lg border border-base-300 bg-base-100 p-3 text-sm">
+                              <p className="font-semibold">Baseline used: {String(metadata.baseline_name)}</p>
+                              <p className="text-base-content/60">Compared to baseline</p>
+                              {comparison ? (
+                                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                  <span>RMS delta: {formatNumber(comparison.rms_delta_db, " dB", 2)}</span>
+                                  <span>Noise delta: {formatNumber(comparison.noise_floor_delta_db, " dB", 2)}</span>
+                                  <span>SNR delta: {formatNumber(comparison.snr_delta_db, " dB", 2)}</span>
+                                  <span>Silence delta: {formatNumber(comparison.silence_ratio_delta, "", 3)}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null;
+                        })()}
                         {parseReasons(selectedTake.quality_reasons_json).length ? (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {parseReasons(selectedTake.quality_reasons_json).map((reason) => (
@@ -1219,15 +1436,6 @@ export function AudioJournalPage() {
                       <div className="alert">
                         <span>{trainingExplanation(selectedEntry, selectedTake)}</span>
                       </div>
-
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={workingAction === "recording-atmosphere"}
-                        onClick={() => handleSetRecordingAtmosphere(selectedEntry.id, selectedTake.id)}
-                      >
-                        Set This Take as Best/Current Recording Atmosphere
-                      </button>
                     </>
                   ) : (
                     <div className="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">

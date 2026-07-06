@@ -10,12 +10,11 @@ from sqlmodel import Session, select
 
 from app.core.config import Settings
 from app.local_ai.stt.whisper_cpp import WhisperCppError, WhisperCppTranscriber
-from app.models.app_setting import AppSetting
-from app.models.audio_journal import AudioJournalEntry, AudioJournalTake
+from app.models.audio_journal import AudioJournalEntry, AudioJournalTake, AudioQualityBaseline
 from app.schemas.audio_journal import (
     AudioJournalEntryCreate,
     AudioJournalEntryUpdate,
-    AudioJournalRecordingAtmosphere,
+    AudioQualityBaselineUpdate,
     AudioJournalTakeCreate,
     AudioJournalTakeUpdate,
     AudioJournalTrainingCandidateUpdate,
@@ -26,9 +25,6 @@ from app.services.stt import SttService, SttUploadError
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-RECORDING_ATMOSPHERE_SETTING_KEY = "audio_journal.recording_atmosphere"
 
 
 class AudioJournalError(ValueError):
@@ -55,6 +51,107 @@ class AudioJournalService:
     def list_entries(self) -> list[AudioJournalEntry]:
         statement = select(AudioJournalEntry).order_by(AudioJournalEntry.journal_date.desc(), AudioJournalEntry.created_at.desc())
         return list(self.session.exec(statement))
+
+    def list_baselines(self) -> list[AudioQualityBaseline]:
+        statement = select(AudioQualityBaseline).order_by(AudioQualityBaseline.is_default.desc(), AudioQualityBaseline.created_at.desc())
+        return list(self.session.exec(statement))
+
+    def get_baseline(self, baseline_id: int) -> AudioQualityBaseline:
+        baseline = self.session.get(AudioQualityBaseline, baseline_id)
+        if not baseline:
+            raise AudioJournalError("Audio quality baseline not found.", status_code=404)
+        return baseline
+
+    def get_default_baseline(self) -> AudioQualityBaseline | None:
+        statement = select(AudioQualityBaseline).where(AudioQualityBaseline.is_default == True)  # noqa: E712
+        return self.session.exec(statement).first()
+
+    def create_baseline(
+        self,
+        *,
+        audio_file: UploadFile,
+        name: str,
+        notes: str | None = None,
+        device_label: str | None = None,
+        environment_label: str | None = None,
+        is_default: bool = False,
+    ) -> AudioQualityBaseline:
+        stt_service = SttService(session=self.session, settings=self.settings, transcriber=self.transcriber)  # type: ignore[arg-type]
+        audio_path = stt_service.save_upload_to_directory(audio_file, self.settings.audio_baselines_dir).resolve()
+        metrics = self.quality_analyzer.analyze(audio_path, has_training_text=True)
+        baseline = AudioQualityBaseline(
+            name=name.strip() or Path(audio_file.filename or "Audio baseline").stem or "Audio baseline",
+            source_audio_path=str(audio_path),
+            source_audio_filename=Path(audio_file.filename or audio_path.name).name,
+            notes=notes,
+            device_label=device_label,
+            environment_label=environment_label,
+            sample_rate=metrics.sample_rate,
+            channels=metrics.channels,
+            duration_seconds=metrics.duration_seconds,
+            file_format=metrics.file_format,
+            peak_db=metrics.peak_db,
+            rms_db=metrics.rms_db,
+            noise_floor_db=metrics.noise_floor_db,
+            snr_estimate_db=metrics.snr_estimate_db,
+            silence_ratio=metrics.silence_ratio,
+            clipping_detected=metrics.clipping_detected,
+            quality_score=metrics.quality_score,
+            is_default=is_default,
+            metadata_json=json.dumps(
+                {
+                    "quality_status": metrics.quality_status,
+                    "quality_summary": metrics.quality_summary,
+                    "quality_reasons": json.loads(metrics.quality_reasons_json or "[]"),
+                }
+            ),
+        )
+        if is_default:
+            self._clear_default_baselines()
+        self.session.add(baseline)
+        self.session.commit()
+        self.session.refresh(baseline)
+        return baseline
+
+    def update_baseline(self, baseline_id: int, payload: AudioQualityBaselineUpdate) -> AudioQualityBaseline:
+        baseline = self.get_baseline(baseline_id)
+        values = payload.model_dump(exclude_unset=True)
+        if values.get("is_default") is True:
+            self._clear_default_baselines(except_baseline_id=baseline_id)
+        for key, value in values.items():
+            setattr(baseline, key, value)
+        baseline.updated_at = utc_now()
+        self.session.add(baseline)
+        self.session.commit()
+        self.session.refresh(baseline)
+        return baseline
+
+    def delete_baseline(self, baseline_id: int, *, delete_audio: bool = False) -> None:
+        baseline = self.get_baseline(baseline_id)
+        if delete_audio:
+            self._delete_audio_file_if_safe(Path(baseline.source_audio_path), roots=[self.settings.audio_baselines_dir])
+        self.session.delete(baseline)
+        self.session.commit()
+
+    def set_default_baseline(self, baseline_id: int) -> AudioQualityBaseline:
+        baseline = self.get_baseline(baseline_id)
+        self._clear_default_baselines(except_baseline_id=baseline_id)
+        baseline.is_default = True
+        baseline.updated_at = utc_now()
+        self.session.add(baseline)
+        self.session.commit()
+        self.session.refresh(baseline)
+        return baseline
+
+    def baseline_audio_path(self, baseline_id: int) -> Path:
+        baseline = self.get_baseline(baseline_id)
+        audio_path = Path(baseline.source_audio_path).resolve()
+        baseline_root = self.settings.audio_baselines_dir.resolve()
+        if audio_path != baseline_root and baseline_root not in audio_path.parents:
+            raise AudioJournalError("Invalid baseline audio path.", status_code=400)
+        if not audio_path.exists() or not audio_path.is_file():
+            raise AudioJournalError("Baseline audio file not found.", status_code=404)
+        return audio_path
 
     def get_entry(self, entry_id: int) -> AudioJournalEntry:
         entry = self.session.get(AudioJournalEntry, entry_id)
@@ -212,13 +309,23 @@ class AudioJournalService:
         entry = self.get_entry(entry_id)
         take = self.get_take(entry_id, take_id)
         has_training_text = bool((take.transcript_text or "").strip() or (entry.script_text or "").strip())
+        baseline = self.get_default_baseline()
         metrics = self.quality_analyzer.analyze(
             Path(take.audio_path),
             has_training_text=has_training_text,
-            recording_atmosphere=self.get_recording_atmosphere(),
+            quality_baseline=baseline,
         )
         for key, value in metrics.model_dump().items():
             setattr(take, key, value)
+        if baseline:
+            take.metadata_json = self._merge_metadata(
+                take.metadata_json,
+                {
+                    "baseline_id": baseline.id,
+                    "baseline_name": baseline.name,
+                    "baseline_comparison": self._baseline_comparison(take, baseline),
+                },
+            )
         self._apply_training_candidate_rules(take, entry, manual_override=False)
         self.session.add(take)
         self._refresh_entry_status(entry)
@@ -227,54 +334,6 @@ class AudioJournalService:
         self.session.commit()
         self.session.refresh(take)
         return take
-
-    def get_recording_atmosphere(self) -> AudioJournalRecordingAtmosphere | None:
-        statement = select(AppSetting).where(AppSetting.key == RECORDING_ATMOSPHERE_SETTING_KEY)
-        setting = self.session.exec(statement).first()
-        if not setting:
-            return None
-        try:
-            return AudioJournalRecordingAtmosphere.model_validate(json.loads(setting.value))
-        except (json.JSONDecodeError, ValueError):
-            return None
-
-    def set_recording_atmosphere_from_take(self, entry_id: int, take_id: int) -> AudioJournalRecordingAtmosphere:
-        take = self.analyze_take_quality(entry_id, take_id)
-        atmosphere = AudioJournalRecordingAtmosphere(
-            captured_at=utc_now(),
-            entry_id=entry_id,
-            take_id=take.id or take_id,
-            take_number=take.take_number,
-            audio_filename=take.audio_filename,
-            duration_seconds=take.duration_seconds,
-            sample_rate=take.sample_rate,
-            channels=take.channels,
-            file_format=take.file_format,
-            quality_score=take.quality_score,
-            noise_floor_db=take.noise_floor_db,
-            rms_db=take.rms_db,
-            peak_db=take.peak_db,
-            silence_ratio=take.silence_ratio,
-            snr_estimate_db=take.snr_estimate_db,
-        )
-        payload = atmosphere.model_dump_json()
-        statement = select(AppSetting).where(AppSetting.key == RECORDING_ATMOSPHERE_SETTING_KEY)
-        setting = self.session.exec(statement).first()
-        if setting:
-            setting.value = payload
-            setting.updated_at = utc_now()
-        else:
-            setting = AppSetting(
-                key=RECORDING_ATMOSPHERE_SETTING_KEY,
-                value=payload,
-                description="Best/current Audio Journal recording atmosphere baseline.",
-            )
-        self.session.add(setting)
-        self.session.commit()
-
-        # Re-run the selected take against the newly stored baseline so its status reflects calibration immediately.
-        self.analyze_take_quality(entry_id, take_id)
-        return atmosphere
 
     def transcribe_take(self, entry_id: int, take_id: int, *, language: str | None = None) -> AudioJournalTake:
         entry = self.get_entry(entry_id)
@@ -387,10 +446,40 @@ class AudioJournalService:
                 return True
         return False
 
-    def _delete_audio_file_if_safe(self, audio_path: Path) -> None:
+    def _delete_audio_file_if_safe(self, audio_path: Path, roots: list[Path] | None = None) -> None:
         resolved = audio_path.resolve()
-        if self._is_inside_journal_storage(resolved):
+        if roots:
+            for root in roots:
+                root_resolved = root.resolve()
+                if resolved == root_resolved or root_resolved in resolved.parents:
+                    resolved.unlink(missing_ok=True)
+                    return
+        elif self._is_inside_journal_storage(resolved):
             resolved.unlink(missing_ok=True)
+
+    def _clear_default_baselines(self, *, except_baseline_id: int | None = None) -> None:
+        statement = select(AudioQualityBaseline).where(AudioQualityBaseline.is_default == True)  # noqa: E712
+        for baseline in self.session.exec(statement):
+            if except_baseline_id is not None and baseline.id == except_baseline_id:
+                continue
+            baseline.is_default = False
+            baseline.updated_at = utc_now()
+            self.session.add(baseline)
+
+    def _baseline_comparison(self, take: AudioJournalTake, baseline: AudioQualityBaseline) -> dict[str, float | None]:
+        return {
+            "rms_delta_db": self._delta(take.rms_db, baseline.rms_db),
+            "peak_delta_db": self._delta(take.peak_db, baseline.peak_db),
+            "noise_floor_delta_db": self._delta(take.noise_floor_db, baseline.noise_floor_db),
+            "snr_delta_db": self._delta(take.snr_estimate_db, baseline.snr_estimate_db),
+            "silence_ratio_delta": self._delta(take.silence_ratio, baseline.silence_ratio),
+        }
+
+    @staticmethod
+    def _delta(value: float | None, baseline_value: float | None) -> float | None:
+        if value is None or baseline_value is None:
+            return None
+        return round(value - baseline_value, 3)
 
     def _can_auto_mark_training_candidate(self, take: AudioJournalTake, entry: AudioJournalEntry) -> bool:
         has_text = bool((take.transcript_text or "").strip() or (entry.script_text or "").strip())

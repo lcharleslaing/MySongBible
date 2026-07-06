@@ -9,7 +9,15 @@ from subprocess import run
 import tempfile
 import wave
 
-from app.schemas.audio_journal import AudioJournalRecordingAtmosphere, AudioQualityMetrics
+from app.schemas.audio_journal import AudioQualityMetrics
+
+
+class AudioQualityReference:
+    rms_db: float | None
+    peak_db: float | None
+    silence_ratio: float | None
+    noise_floor_db: float | None
+    snr_estimate_db: float | None
 
 
 @dataclass
@@ -28,7 +36,7 @@ class AudioQualityAnalyzer:
         audio_path: Path,
         *,
         has_training_text: bool = False,
-        recording_atmosphere: AudioJournalRecordingAtmosphere | None = None,
+        quality_baseline: AudioQualityReference | None = None,
     ) -> AudioQualityMetrics:
         suffix = audio_path.suffix.lower().lstrip(".")
         if suffix != "wav":
@@ -45,21 +53,21 @@ class AudioQualityAnalyzer:
                 metrics = self._analyze_wav(
                     converted_path,
                     has_training_text=has_training_text,
-                    recording_atmosphere=recording_atmosphere,
+                    quality_baseline=quality_baseline,
                 )
                 metrics.file_format = suffix or metrics.file_format
                 return metrics
             finally:
                 converted_path.unlink(missing_ok=True)
 
-        return self._analyze_wav(audio_path, has_training_text=has_training_text, recording_atmosphere=recording_atmosphere)
+        return self._analyze_wav(audio_path, has_training_text=has_training_text, quality_baseline=quality_baseline)
 
     def _analyze_wav(
         self,
         audio_path: Path,
         *,
         has_training_text: bool,
-        recording_atmosphere: AudioJournalRecordingAtmosphere | None,
+        quality_baseline: AudioQualityReference | None,
     ) -> AudioQualityMetrics:
         try:
             decoded = self._decode_wav(audio_path)
@@ -100,9 +108,9 @@ class AudioQualityAnalyzer:
             score -= 60
             reasons.append("clipping_detected")
 
-        rms_floor = self._rms_floor(recording_atmosphere)
-        peak_floor = self._peak_floor(recording_atmosphere)
-        silence_limit = self._silence_limit(recording_atmosphere)
+        rms_floor = self._rms_floor(quality_baseline)
+        peak_floor = self._peak_floor(quality_baseline)
+        silence_limit = self._silence_limit(quality_baseline)
 
         if rms_db is None or rms_db < rms_floor:
             if status != "rejected":
@@ -116,7 +124,12 @@ class AudioQualityAnalyzer:
             score -= 8
             reasons.append("peak_too_low")
 
-        if silence_ratio > silence_limit:
+        if silence_ratio > 0.92:
+            if status != "rejected":
+                status = "review"
+            score -= 25
+            reasons.append("mostly_silence")
+        elif silence_ratio > silence_limit:
             if status != "rejected":
                 status = "review"
             score -= 12
@@ -125,18 +138,38 @@ class AudioQualityAnalyzer:
             score -= 5
             reasons.append("moderate_silence_ratio")
 
+        if quality_baseline:
+            if (
+                noise_floor is not None
+                and quality_baseline.noise_floor_db is not None
+                and noise_floor > quality_baseline.noise_floor_db + 12
+            ):
+                if status != "rejected":
+                    status = "review"
+                score -= 12
+                reasons.append("noise_floor_above_baseline")
+            if (
+                snr is not None
+                and quality_baseline.snr_estimate_db is not None
+                and snr < quality_baseline.snr_estimate_db - 12
+            ):
+                if status != "rejected":
+                    status = "review"
+                score -= 12
+                reasons.append("snr_below_baseline")
+
         if not has_training_text:
             score -= 5
             reasons.append("transcript_or_script_missing")
 
-        if recording_atmosphere:
-            reasons.append("recording_atmosphere_baseline_applied")
+        if quality_baseline:
+            reasons.append("quality_baseline_applied")
 
         score = max(0.0, min(100.0, round(score, 2)))
         if not reasons:
             summary = "WAV quality looks usable for a first-pass local dataset review."
-        elif status == "usable" and recording_atmosphere:
-            summary = "Audio quality is usable relative to the current recording atmosphere baseline."
+        elif status == "usable" and quality_baseline:
+            summary = "Audio quality is usable relative to the default uploaded baseline."
         elif status == "rejected":
             summary = "WAV quality has a major issue and should not be used for training without review."
         else:
@@ -243,17 +276,17 @@ class AudioQualityAnalyzer:
             return None
         return round(20 * math.log10(value), 2)
 
-    def _rms_floor(self, recording_atmosphere: AudioJournalRecordingAtmosphere | None) -> float:
-        if recording_atmosphere is None or recording_atmosphere.rms_db is None:
+    def _rms_floor(self, quality_baseline: AudioQualityReference | None) -> float:
+        if quality_baseline is None or quality_baseline.rms_db is None:
             return -50
-        return min(-50, recording_atmosphere.rms_db - 12)
+        return max(-50, quality_baseline.rms_db - 12)
 
-    def _peak_floor(self, recording_atmosphere: AudioJournalRecordingAtmosphere | None) -> float:
-        if recording_atmosphere is None or recording_atmosphere.peak_db is None:
+    def _peak_floor(self, quality_baseline: AudioQualityReference | None) -> float:
+        if quality_baseline is None or quality_baseline.peak_db is None:
             return -45
-        return min(-45, recording_atmosphere.peak_db - 12)
+        return max(-45, quality_baseline.peak_db - 12)
 
-    def _silence_limit(self, recording_atmosphere: AudioJournalRecordingAtmosphere | None) -> float:
-        if recording_atmosphere is None or recording_atmosphere.silence_ratio is None:
+    def _silence_limit(self, quality_baseline: AudioQualityReference | None) -> float:
+        if quality_baseline is None or quality_baseline.silence_ratio is None:
             return 0.65
-        return min(0.9, max(0.65, recording_atmosphere.silence_ratio + 0.15))
+        return min(0.9, max(0.65, quality_baseline.silence_ratio + 0.15))

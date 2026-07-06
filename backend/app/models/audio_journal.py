@@ -56,3 +56,28 @@ class AudioJournalTake(SQLModel, table=True):
     training_quality: str | None = Field(default=None, max_length=32)
     script_match_score: float | None = None
     metadata_json: str | None = None
+
+
+class AudioQualityBaseline(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=200)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)
+    updated_at: datetime = Field(default_factory=utc_now, nullable=False)
+    source_audio_path: str = Field(max_length=500)
+    source_audio_filename: str = Field(max_length=255)
+    notes: str | None = None
+    device_label: str | None = Field(default=None, max_length=100)
+    environment_label: str | None = Field(default=None, max_length=100)
+    sample_rate: int | None = None
+    channels: int | None = None
+    duration_seconds: float | None = None
+    file_format: str | None = Field(default=None, max_length=32)
+    peak_db: float | None = None
+    rms_db: float | None = None
+    noise_floor_db: float | None = None
+    snr_estimate_db: float | None = None
+    silence_ratio: float | None = None
+    clipping_detected: bool = False
+    quality_score: float | None = None
+    is_default: bool = False
+    metadata_json: str | None = None
