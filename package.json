@@ -39,7 +39,7 @@
   },
   "build": {
     "appId": "com.localfirst.apptemplatebase",
-    "productName": "App Template Base",
+    "productName": "AppTemplateBase",
     "directories": {
       "output": "release"
     },

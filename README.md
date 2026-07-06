@@ -1,4 +1,4 @@
-# App Template Base
+# AppTemplateBase
 
 AppTemplateBase is a reusable local-first desktop application template for building future apps with a consistent architecture.
 

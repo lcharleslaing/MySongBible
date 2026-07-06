@@ -11,6 +11,18 @@
       "audio_input_dir": "data/audio/input",
       "tts_output_dir": "data/audio/tts",
       "tts_timeout_seconds": 120
+    },
+    {
+      "device_name": "nonyabiz-615",
+      "whisper_cpp_binary": "/home/nonyabiz/whisper.cpp/build/bin/whisper-cli",
+      "whisper_model_path": "/home/nonyabiz/whisper.cpp/models/ggml-base.bin",
+      "whisper_thread_count": 4,
+      "tts_engine": "piper",
+      "piper_binary": "/home/nonyabiz/local-ai/piper/bin/piper-tts",
+      "piper_model_path": "/home/nonyabiz/local-ai/piper/models/en_US-amy-medium.onnx",
+      "audio_input_dir": "data/audio/input",
+      "tts_output_dir": "data/audio/tts",
+      "tts_timeout_seconds": 240
     }
   ]
 }
