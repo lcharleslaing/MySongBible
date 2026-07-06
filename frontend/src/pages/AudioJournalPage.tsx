@@ -165,6 +165,18 @@ export function AudioJournalPage() {
     startRecording,
     stopRecording,
   } = useAudioRecorder();
+  const {
+    audioBlob: teleprompterAudioBlob,
+    audioUrl: teleprompterAudioUrl,
+    fileName: teleprompterFileName,
+    formatCompatibilityWarning: teleprompterFormatWarning,
+    isRecording: isTeleprompterRecording,
+    mimeType: teleprompterMimeType,
+    recorderError: teleprompterRecorderError,
+    resetRecording: resetTeleprompterRecording,
+    startRecording: startTeleprompterRecording,
+    stopRecording: stopTeleprompterRecording,
+  } = useAudioRecorder();
 
   const [entries, setEntries] = useState<AudioJournalEntryRecord[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<AudioJournalEntryRecord | null>(null);
@@ -188,6 +200,13 @@ export function AudioJournalPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [takeAudioUrl, setTakeAudioUrl] = useState("");
+  const [isTeleprompterOpen, setIsTeleprompterOpen] = useState(false);
+  const [teleprompterScript, setTeleprompterScript] = useState("");
+  const [teleprompterCountdown, setTeleprompterCountdown] = useState<number | null>(null);
+  const [teleprompterElapsedSeconds, setTeleprompterElapsedSeconds] = useState(0);
+  const [isSavingTeleprompterTake, setIsSavingTeleprompterTake] = useState(false);
+  const [teleprompterError, setTeleprompterError] = useState("");
+  const [savedTeleprompterTake, setSavedTeleprompterTake] = useState<AudioJournalTakeRecord | null>(null);
 
   const selectedTake = useMemo(() => {
     if (!selectedEntry) {
@@ -261,6 +280,37 @@ export function AudioJournalPage() {
   useEffect(() => {
     setTakeTranscriptText(selectedTake?.transcript_text || "");
   }, [selectedTake]);
+
+  useEffect(() => {
+    if (teleprompterCountdown === null) {
+      return;
+    }
+
+    if (teleprompterCountdown <= 0) {
+      setTeleprompterCountdown(null);
+      setTeleprompterElapsedSeconds(0);
+      startTeleprompterRecording();
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setTeleprompterCountdown((current) => (current === null ? null : current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [startTeleprompterRecording, teleprompterCountdown]);
+
+  useEffect(() => {
+    if (!isTeleprompterRecording) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setTeleprompterElapsedSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isTeleprompterRecording]);
 
   useEffect(() => {
     let cancelled = false;
@@ -529,6 +579,91 @@ export function AudioJournalPage() {
     });
   }
 
+  function openTeleprompter(entry: AudioJournalEntryRecord) {
+    const script = entry.script_text?.trim() || entryForm.scriptText.trim();
+    if (!script) {
+      setErrorMessage("Transcribe or enter script text first.");
+      return;
+    }
+
+    setTeleprompterScript(script);
+    setTeleprompterCountdown(null);
+    setTeleprompterElapsedSeconds(0);
+    setTeleprompterError("");
+    setSavedTeleprompterTake(null);
+    resetTeleprompterRecording();
+    setIsTeleprompterOpen(true);
+  }
+
+  function closeTeleprompter() {
+    if (isTeleprompterRecording) {
+      stopTeleprompterRecording();
+    }
+    setTeleprompterCountdown(null);
+    setIsTeleprompterOpen(false);
+  }
+
+  function startTeleprompterCountdown() {
+    setTeleprompterError("");
+    setSavedTeleprompterTake(null);
+    resetTeleprompterRecording();
+    setTeleprompterElapsedSeconds(0);
+    setTeleprompterCountdown(5);
+  }
+
+  function tryTeleprompterAgain() {
+    if (isTeleprompterRecording) {
+      stopTeleprompterRecording();
+    }
+    setTeleprompterCountdown(null);
+    setTeleprompterElapsedSeconds(0);
+    setTeleprompterError("");
+    setSavedTeleprompterTake(null);
+    resetTeleprompterRecording();
+  }
+
+  async function saveTeleprompterTake() {
+    if (!selectedEntry || !teleprompterAudioBlob) {
+      setTeleprompterError("Record a new take before saving.");
+      return;
+    }
+
+    setIsSavingTeleprompterTake(true);
+    setTeleprompterError("");
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const script = teleprompterScript.trim();
+
+    try {
+      if (script && script !== (selectedEntry.script_text || "").trim()) {
+        const updatedEntry = await updateAudioJournalEntry(selectedEntry.id, {
+          script_text: script,
+        });
+        setSelectedEntry(updatedEntry);
+        setEntries((current) => current.map((item) => (item.id === updatedEntry.id ? updatedEntry : item)));
+      }
+
+      const formData = new FormData();
+      const extension = teleprompterFileName || `audio-journal-rerecord.${teleprompterMimeType.includes("ogg") ? "ogg" : "webm"}`;
+      formData.append("audio_file", teleprompterAudioBlob, extension);
+      formData.append("take_type", "rerecord");
+      formData.append("transcript_source", "script");
+      if (script) {
+        formData.append("transcript_text", script);
+      }
+
+      const take = await createAudioJournalTake(selectedEntry.id, formData);
+      setSavedTeleprompterTake(take);
+      await refreshSelectedEntry(selectedEntry.id, take.id);
+      setSuccessMessage(`Saved Take ${take.take_number}.`);
+    } catch (error) {
+      setTeleprompterError(apiErrorMessage(error, "Could not save the re-recorded take."));
+    } finally {
+      setIsSavingTeleprompterTake(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -745,11 +880,23 @@ export function AudioJournalPage() {
                       <h2 className="card-title text-xl">Entry detail</h2>
                       <p className="text-sm text-base-content/60">Created {formatDate(selectedEntry.created_at)}</p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={!selectedEntry.script_text?.trim() && !entryForm.scriptText.trim()}
+                        onClick={() => openTeleprompter(selectedEntry)}
+                      >
+                        Re-record From Transcript
+                      </button>
                       <span className="badge badge-outline">Active: {takeLabel(activeTake)}</span>
                       <span className="badge badge-outline">Selected: {takeLabel(selectedTrainingTake)}</span>
                     </div>
                   </div>
+
+                  {!selectedEntry.script_text?.trim() && !entryForm.scriptText.trim() ? (
+                    <div className="alert alert-warning py-2 text-sm">Transcribe or enter script text first.</div>
+                  ) : null}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="form-control">
@@ -932,6 +1079,14 @@ export function AudioJournalPage() {
                                 </button>
                                 <button
                                   type="button"
+                                  className="btn btn-secondary btn-xs"
+                                  disabled={!selectedEntry.script_text?.trim() && !entryForm.scriptText.trim()}
+                                  onClick={() => openTeleprompter(selectedEntry)}
+                                >
+                                  Re-record From Transcript
+                                </button>
+                                <button
+                                  type="button"
                                   className="btn btn-error btn-outline btn-xs"
                                   disabled={workingAction === "delete-take"}
                                   onClick={() => handleDeleteTake(selectedEntry.id, take)}
@@ -1031,6 +1186,207 @@ export function AudioJournalPage() {
           )}
         </div>
       </section>
+
+      {isTeleprompterOpen && selectedEntry ? (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-5xl space-y-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-bold">Re-record From Transcript</h2>
+                <p className="text-sm text-base-content/60">{selectedEntry.title}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={teleprompterCountdown !== null || isSavingTeleprompterTake}
+                onClick={closeTeleprompter}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="alert alert-warning">
+              <span>Speak as close to the script as possible. Clean audio and accurate text improve future voice training.</span>
+            </div>
+
+            {teleprompterError ? (
+              <div className="alert alert-error">
+                <span>{teleprompterError}</span>
+              </div>
+            ) : null}
+            {teleprompterRecorderError ? (
+              <div className="alert alert-error">
+                <span>{teleprompterRecorderError}</span>
+              </div>
+            ) : null}
+            {teleprompterFormatWarning ? (
+              <div className="alert alert-info">
+                <span>{teleprompterFormatWarning}</span>
+              </div>
+            ) : null}
+
+            <label className="form-control">
+              <span className="label-text">Teleprompter script</span>
+              <textarea
+                className="textarea textarea-bordered min-h-32"
+                value={teleprompterScript}
+                disabled={teleprompterCountdown !== null || isTeleprompterRecording || isSavingTeleprompterTake}
+                onChange={(event) => setTeleprompterScript(event.target.value)}
+              />
+            </label>
+
+            <div className="rounded-lg border border-base-300 bg-base-200 p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold uppercase text-base-content/60">Prompt</p>
+                  <p className="text-sm text-base-content/60">Read at a steady pace and keep room noise low.</p>
+                </div>
+                <div className="text-right">
+                  {teleprompterCountdown !== null ? (
+                    <div className="text-7xl font-bold text-primary">{teleprompterCountdown}</div>
+                  ) : isTeleprompterRecording ? (
+                    <div>
+                      <div className="badge badge-error badge-lg">Recording...</div>
+                      <p className="mt-2 text-3xl font-bold">{teleprompterElapsedSeconds}s</p>
+                    </div>
+                  ) : (
+                    <div className="badge badge-outline badge-lg">Ready</div>
+                  )}
+                </div>
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-lg bg-base-100 p-5 text-2xl font-semibold leading-relaxed text-base-content md:text-3xl">
+                {teleprompterScript || "No script available."}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={
+                  !teleprompterScript.trim() ||
+                  teleprompterCountdown !== null ||
+                  isTeleprompterRecording ||
+                  isSavingTeleprompterTake
+                }
+                onClick={startTeleprompterCountdown}
+              >
+                Start Countdown
+              </button>
+              <button
+                type="button"
+                className="btn btn-error"
+                disabled={!isTeleprompterRecording || isSavingTeleprompterTake}
+                onClick={stopTeleprompterRecording}
+              >
+                Stop Recording
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={teleprompterCountdown !== null || isTeleprompterRecording || isSavingTeleprompterTake}
+                onClick={tryTeleprompterAgain}
+              >
+                Try Again
+              </button>
+            </div>
+
+            {teleprompterAudioUrl ? (
+              <div className="rounded-lg border border-base-300 bg-base-100 p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">New recording preview</span>
+                  <span className="badge badge-outline">{teleprompterFileName || "re-recording"}</span>
+                </div>
+                <audio className="w-full" controls src={teleprompterAudioUrl} />
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={
+                  !teleprompterAudioBlob ||
+                  teleprompterCountdown !== null ||
+                  isTeleprompterRecording ||
+                  isSavingTeleprompterTake
+                }
+                onClick={saveTeleprompterTake}
+              >
+                {isSavingTeleprompterTake ? "Saving..." : "Save as New Take"}
+              </button>
+            </div>
+
+            {savedTeleprompterTake ? (
+              <div className="rounded-lg border border-base-300 bg-base-100 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">Take {savedTeleprompterTake.take_number} saved</h3>
+                    <p className="text-sm text-base-content/70">
+                      Quality score: {formatNumber(savedTeleprompterTake.quality_score, "", 0)}
+                    </p>
+                  </div>
+                  <span className={`badge ${qualityBadgeClass(savedTeleprompterTake.quality_status)}`}>
+                    {savedTeleprompterTake.quality_status}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-base-content/70">
+                  {savedTeleprompterTake.quality_status === "usable"
+                    ? "This take looks usable after transcript confirmation."
+                    : savedTeleprompterTake.quality_summary || "Review this take before using it."}
+                </p>
+                {parseReasons(savedTeleprompterTake.quality_reasons_json).length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {parseReasons(savedTeleprompterTake.quality_reasons_json).map((reason) => (
+                      <span key={reason} className="badge badge-outline">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={workingAction === "transcribe"}
+                    onClick={() => handleTranscribeTake(selectedEntry.id, savedTeleprompterTake.id)}
+                  >
+                    Transcribe New Take
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={workingAction === "set-active"}
+                    onClick={() => handleSetActiveTake(selectedEntry.id, savedTeleprompterTake.id)}
+                  >
+                    Set Active
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={workingAction === "analyze"}
+                    onClick={() => handleAnalyzeTake(selectedEntry.id, savedTeleprompterTake.id)}
+                  >
+                    Analyze Quality
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={tryTeleprompterAgain}>
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <div className="modal-backdrop">
+            <button
+              type="button"
+              disabled={teleprompterCountdown !== null || isSavingTeleprompterTake}
+              onClick={closeTeleprompter}
+            >
+              close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
