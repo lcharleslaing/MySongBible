@@ -2,6 +2,7 @@ from io import BytesIO
 import asyncio
 import math
 from pathlib import Path
+from subprocess import CompletedProcess
 import struct
 import wave
 
@@ -335,6 +336,29 @@ def test_audio_journal_transcribe_updates_take_transcript_status_and_engine(clie
     assert take["transcription_status"] == "completed"
     assert take["transcription_engine"] == "whisper.cpp"
     assert take["transcription_model"] == "ggml-base.en.bin"
+
+
+def test_audio_journal_transcribe_converts_non_wav_take_before_whisper(client, tmp_path: Path, monkeypatch) -> None:
+    payload = create_entry(client, tmp_path, audio=b"mp3", filename="journal.mp3")
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+    transcriber = FakeWhisperTranscriber("Converted audio transcript.")
+
+    def fake_run(command, **kwargs):
+        output_path = Path(command[-1])
+        output_path.write_bytes(b"RIFFconverted")
+        return CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.services.stt.shutil.which", lambda name: "/usr/bin/ffmpeg" if name == "ffmpeg" else None)
+    monkeypatch.setattr("app.services.stt.run", fake_run)
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, transcriber)
+
+    assert response.status_code == 200
+    assert response.json()["take"]["transcript_text"] == "Converted audio transcript."
+    assert transcriber.last_audio_path is not None
+    assert transcriber.last_audio_path.suffix == ".wav"
+    assert not transcriber.last_audio_path.exists()
 
 
 def test_audio_journal_original_transcription_sets_entry_original_transcript_and_script_when_blank(client, tmp_path: Path) -> None:

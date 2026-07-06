@@ -103,16 +103,16 @@ class SttService:
         return Path(filename or fallback).name
 
     def _prepare_transcription_audio(self, audio_file_path: Path) -> Path:
-        if audio_file_path.suffix.lower() != ".webm":
+        if audio_file_path.suffix.lower() == ".wav":
             return audio_file_path
 
-        return self._convert_webm_to_wav(audio_file_path)
+        return self._convert_audio_to_wav(audio_file_path)
 
-    def _convert_webm_to_wav(self, audio_file_path: Path) -> Path:
+    def _convert_audio_to_wav(self, audio_file_path: Path) -> Path:
         ffmpeg_path = shutil.which("ffmpeg")
         if not ffmpeg_path:
             raise SttUploadError(
-                "Recorded WebM audio requires ffmpeg for conversion before whisper.cpp transcription.",
+                f"Audio file '{audio_file_path.suffix or 'unknown'}' requires ffmpeg for conversion before whisper.cpp transcription.",
                 status_code=503,
             )
 
@@ -138,7 +138,7 @@ class SttService:
         if completed.returncode != 0:
             converted_path.unlink(missing_ok=True)
             raise SttUploadError(
-                "Could not convert recorded WebM audio to WAV for transcription.",
+                "Could not convert audio to WAV for transcription.",
                 status_code=502,
             )
 
