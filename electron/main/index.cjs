@@ -13,6 +13,10 @@ if (smokeMode || process.env.APP_TEMPLATE_DISABLE_CHROMIUM_SANDBOX === "1") {
   app.commandLine.appendSwitch("no-sandbox");
 }
 
+if (process.env.APP_TEMPLATE_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.APP_TEMPLATE_USER_DATA_DIR));
+}
+
 let mainWindow = null;
 let backendController = null;
 

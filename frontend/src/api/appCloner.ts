@@ -7,6 +7,10 @@ export type AppCloneStatus = {
   repo_url: string | null;
   destination_parent: string | null;
   clone_path: string | null;
+  app_data_dir: string | null;
+  user_data_dir: string | null;
+  frontend_port: number | null;
+  backend_port: number | null;
   started_at: string | null;
   finished_at: string | null;
   git_exit_code: number | null;

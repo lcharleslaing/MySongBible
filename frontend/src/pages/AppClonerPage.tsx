@@ -252,7 +252,11 @@ export function AppClonerPage() {
                 <div className="grid gap-3 text-sm md:grid-cols-2">
                   <span>Repo: {status.repo_url || "n/a"}</span>
                   <span>Git exit: {status.git_exit_code ?? "n/a"}</span>
+                  <span>Frontend port: {status.frontend_port ?? "n/a"}</span>
+                  <span>Backend port: {status.backend_port ?? "n/a"}</span>
                   <span className="md:col-span-2">Clone path: {status.clone_path || "n/a"}</span>
+                  <span className="md:col-span-2">App data: {status.app_data_dir || "n/a"}</span>
+                  <span className="md:col-span-2">Electron data: {status.user_data_dir || "n/a"}</span>
                   <span className="md:col-span-2">Log: {status.log_path}</span>
                 </div>
 

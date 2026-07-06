@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
+import socket
 from subprocess import Popen, run
 import threading
 
@@ -27,6 +29,10 @@ class CloneJobState:
     repo_url: str | None = None
     destination_parent: str | None = None
     clone_path: str | None = None
+    app_data_dir: str | None = None
+    user_data_dir: str | None = None
+    frontend_port: int | None = None
+    backend_port: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     git_exit_code: int | None = None
@@ -79,6 +85,7 @@ class AppCloneRunner:
 
     def start(self, payload: AppCloneRequest) -> AppCloneStatus:
         clone_path = self._resolve_clone_path(payload)
+        runtime = self._build_runtime_settings(clone_path)
         with self._lock:
             if self._state.running:
                 raise AppCloneError("A clone job is already running.", status_code=409)
@@ -89,14 +96,18 @@ class AppCloneRunner:
                 repo_url=payload.repo_url,
                 destination_parent=str(Path(payload.destination_parent).expanduser().resolve()),
                 clone_path=str(clone_path),
+                app_data_dir=str(runtime["app_data_dir"]),
+                user_data_dir=str(runtime["user_data_dir"]),
+                frontend_port=int(runtime["frontend_port"]),
+                backend_port=int(runtime["backend_port"]),
                 started_at=self._now(),
             )
         self._reset_log()
-        thread = threading.Thread(target=self._run_job, args=(payload, clone_path), daemon=True)
+        thread = threading.Thread(target=self._run_job, args=(payload, clone_path, runtime), daemon=True)
         thread.start()
         return self.status()
 
-    def _run_job(self, payload: AppCloneRequest, clone_path: Path) -> None:
+    def _run_job(self, payload: AppCloneRequest, clone_path: Path, runtime: dict[str, Path | int | str]) -> None:
         git_exit_code: int | None = None
         npm_start_pid: int | None = None
         status = "failed"
@@ -119,12 +130,25 @@ class AppCloneRunner:
 
             status = "cloned"
             message = "Repository cloned."
+            self._exclude_runtime_dir(clone_path)
             if payload.run_npm_start:
-                self._append_log("Starting cloned app with npm start.")
+                env = self._build_child_env(runtime)
+                self._append_log(
+                    "\n".join(
+                        [
+                            "Starting cloned app with npm start.",
+                            f"Frontend: http://127.0.0.1:{runtime['frontend_port']}",
+                            f"Backend: http://127.0.0.1:{runtime['backend_port']}",
+                            f"App data: {runtime['app_data_dir']}",
+                            f"Electron user data: {runtime['user_data_dir']}",
+                        ]
+                    )
+                )
                 log_file = self.log_path.open("a", encoding="utf-8")
                 process = Popen(
                     ["npm", "start"],
                     cwd=str(clone_path),
+                    env=env,
                     stdout=log_file,
                     stderr=log_file,
                     start_new_session=True,
@@ -181,6 +205,10 @@ class AppCloneRunner:
             repo_url=state.repo_url,
             destination_parent=state.destination_parent,
             clone_path=state.clone_path,
+            app_data_dir=state.app_data_dir,
+            user_data_dir=state.user_data_dir,
+            frontend_port=state.frontend_port,
+            backend_port=state.backend_port,
             started_at=state.started_at,
             finished_at=state.finished_at,
             git_exit_code=state.git_exit_code,
@@ -188,6 +216,64 @@ class AppCloneRunner:
             log_path=str(self.log_path),
             last_lines=self._last_log_lines(),
         )
+
+    def _build_runtime_settings(self, clone_path: Path) -> dict[str, Path | int | str]:
+        runtime_dir = clone_path / ".apptemplatebase-runtime"
+        app_data_dir = runtime_dir / "backend-data"
+        user_data_dir = runtime_dir / "electron-user-data"
+        backend_port = self._find_available_port()
+        frontend_port = self._find_available_port(exclude={backend_port})
+        return {
+            "runtime_dir": runtime_dir,
+            "app_data_dir": app_data_dir,
+            "user_data_dir": user_data_dir,
+            "database_url": f"sqlite:///{app_data_dir / 'app_template_base.sqlite3'}",
+            "backend_port": backend_port,
+            "frontend_port": frontend_port,
+        }
+
+    def _build_child_env(self, runtime: dict[str, Path | int | str]) -> dict[str, str]:
+        backend_port = str(runtime["backend_port"])
+        frontend_port = str(runtime["frontend_port"])
+        backend_url = f"http://127.0.0.1:{backend_port}"
+        Path(runtime["app_data_dir"]).mkdir(parents=True, exist_ok=True)
+        Path(runtime["user_data_dir"]).mkdir(parents=True, exist_ok=True)
+        env = os.environ.copy()
+        env.update(
+            {
+                "PORT": frontend_port,
+                "VITE_DEV_SERVER_PORT": frontend_port,
+                "ELECTRON_RENDERER_URL": f"http://127.0.0.1:{frontend_port}",
+                "ELECTRON_BACKEND_PORT": backend_port,
+                "BACKEND_PORT": backend_port,
+                "ELECTRON_BACKEND_BASE_URL": backend_url,
+                "ELECTRON_BACKEND_HEALTH_URL": f"{backend_url}/api/health",
+                "APP_DATA_DIR": str(runtime["app_data_dir"]),
+                "DATABASE_URL": str(runtime["database_url"]),
+                "APP_TEMPLATE_USER_DATA_DIR": str(runtime["user_data_dir"]),
+                "LOG_DIR": str(Path(runtime["user_data_dir"]) / "logs"),
+            }
+        )
+        return env
+
+    def _exclude_runtime_dir(self, clone_path: Path) -> None:
+        exclude_path = clone_path / ".git" / "info" / "exclude"
+        if not exclude_path.exists():
+            return
+        content = exclude_path.read_text(encoding="utf-8")
+        if ".apptemplatebase-runtime/" in content:
+            return
+        exclude_path.write_text(f"{content.rstrip()}\n.apptemplatebase-runtime/\n", encoding="utf-8")
+
+    def _find_available_port(self, *, exclude: set[int] | None = None) -> int:
+        excluded = exclude or set()
+        for _ in range(20):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = int(sock.getsockname()[1])
+            if port not in excluded:
+                return port
+        raise AppCloneError("Could not allocate an available local port.", status_code=500)
 
     def _reset_log(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)

@@ -17,6 +17,10 @@ class AppCloneStatus(BaseModel):
     repo_url: str | None = None
     destination_parent: str | None = None
     clone_path: str | None = None
+    app_data_dir: str | None = None
+    user_data_dir: str | None = None
+    frontend_port: int | None = None
+    backend_port: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     git_exit_code: int | None = None

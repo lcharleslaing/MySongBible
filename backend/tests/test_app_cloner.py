@@ -56,6 +56,8 @@ def test_app_cloner_runs_git_clone_and_npm_start(client, tmp_path: Path, monkeyp
     destination = tmp_path / "projects"
     destination.mkdir()
     calls: list[tuple[str, list[str], str]] = []
+    launched_env: dict[str, str] = {}
+    ports = iter([19001, 19002])
 
     def fake_run(command, **kwargs):
         calls.append(("run", list(command), str(kwargs.get("cwd"))))
@@ -67,11 +69,13 @@ def test_app_cloner_runs_git_clone_and_npm_start(client, tmp_path: Path, monkeyp
         pid = 4321
 
     def fake_popen(command, **kwargs):
+        launched_env.update(kwargs.get("env") or {})
         calls.append(("popen", list(command), str(kwargs.get("cwd"))))
         return FakeProcess()
 
     monkeypatch.setattr("app.services.app_cloner.run", fake_run)
     monkeypatch.setattr("app.services.app_cloner.Popen", fake_popen)
+    monkeypatch.setattr("app.services.app_cloner.AppCloneRunner._find_available_port", lambda self, exclude=None: next(ports))
 
     response = client.post(
         "/api/app-cloner/clone",
@@ -88,8 +92,20 @@ def test_app_cloner_runs_git_clone_and_npm_start(client, tmp_path: Path, monkeyp
     assert status["status"] == "started"
     assert status["npm_start_pid"] == 4321
     assert status["clone_path"] == str(destination / "my-app")
+    assert status["backend_port"] == 19001
+    assert status["frontend_port"] == 19002
+    assert status["app_data_dir"] == str(destination / "my-app" / ".apptemplatebase-runtime" / "backend-data")
+    assert status["user_data_dir"] == str(destination / "my-app" / ".apptemplatebase-runtime" / "electron-user-data")
     assert ("run", ["git", "clone", "https://github.com/example/app.git", str(destination / "my-app")], str(destination)) in calls
     assert ("popen", ["npm", "start"], str(destination / "my-app")) in calls
+    assert launched_env["VITE_DEV_SERVER_PORT"] == str(status["frontend_port"])
+    assert launched_env["ELECTRON_RENDERER_URL"] == f"http://127.0.0.1:{status['frontend_port']}"
+    assert launched_env["ELECTRON_BACKEND_PORT"] == str(status["backend_port"])
+    assert launched_env["BACKEND_PORT"] == str(status["backend_port"])
+    assert launched_env["ELECTRON_BACKEND_BASE_URL"] == f"http://127.0.0.1:{status['backend_port']}"
+    assert launched_env["APP_DATA_DIR"] == status["app_data_dir"]
+    assert launched_env["DATABASE_URL"] == f"sqlite:///{status['app_data_dir']}/app_template_base.sqlite3"
+    assert launched_env["APP_TEMPLATE_USER_DATA_DIR"] == status["user_data_dir"]
 
 
 def test_app_cloner_blocks_existing_nonempty_directory(client, tmp_path: Path) -> None:
