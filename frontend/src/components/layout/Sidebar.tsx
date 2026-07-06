@@ -3,6 +3,7 @@ import { useAppDefinition } from "../../context/AppDefinitionContext";
 
 const navItems = [
   { to: "/", label: "Home" },
+  { to: "/audio-journal", label: "Audio Journal" },
   { to: "/voice-lab", label: "Voice Lab" },
   { to: "/local-ai-setup", label: "Local AI Setup" },
   { to: "/settings", label: "Settings" },
