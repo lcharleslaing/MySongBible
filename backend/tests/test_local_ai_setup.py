@@ -9,6 +9,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.local_ai_setup import core  # noqa: E402
+from tools.local_ai_setup import cli  # noqa: E402
 
 
 def test_env_update_preserves_customized_values_without_force(tmp_path: Path, monkeypatch) -> None:
@@ -86,3 +87,21 @@ def test_choose_existing_path_selects_first_existing_file(tmp_path: Path) -> Non
     second.write_text("ok", encoding="utf-8")
 
     assert core.choose_existing_path([first, second]) == second
+
+
+def test_summary_uses_configured_whisper_model_path(tmp_path: Path, monkeypatch, capsys) -> None:
+    env_path = tmp_path / ".env"
+    model = tmp_path / "models" / "ggml-base.bin"
+    binary = tmp_path / "local-ai" / "whisper.cpp" / "build" / "bin" / "whisper-cli"
+    model.parent.mkdir(parents=True)
+    binary.parent.mkdir(parents=True)
+    model.write_text("model", encoding="utf-8")
+    binary.write_text("binary", encoding="utf-8")
+    env_path.write_text(f"WHISPER_MODEL_PATH={model}\n", encoding="utf-8")
+    monkeypatch.setenv("LOCAL_AI_HOME", str(tmp_path / "local-ai"))
+    monkeypatch.setattr(core, "BACKEND_ENV_PATH", env_path)
+
+    cli.print_summary(core.Result(), core.Result())
+
+    output = capsys.readouterr().out
+    assert f"- Whisper model: PASS {model}" in output

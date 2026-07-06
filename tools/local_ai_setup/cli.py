@@ -12,6 +12,8 @@ from .core import (
     local_ai_paths,
     piper_model_path,
     piper_wrapper_path,
+    read_backend_env,
+    resolve_from_backend,
     setup_piper,
     setup_whisper,
     whisper_binary_candidates,
@@ -29,7 +31,8 @@ def print_summary(stt: Result, tts: Result, env_updated: Result | None = None) -
     whisper_binary = next((candidate for candidate in whisper_binary_candidates(paths["root"]) if candidate.exists()), None)
     print("\nLocal AI Setup Summary:")
     print(f"- Whisper binary: {'PASS ' + str(whisper_binary) if whisper_binary else 'WARN not found yet'}")
-    model = whisper_model_path(DEFAULT_WHISPER_MODEL, paths["root"])
+    env = read_backend_env()
+    model = resolve_from_backend(env.get("WHISPER_MODEL_PATH"), whisper_model_path(DEFAULT_WHISPER_MODEL, paths["root"]))
     print(f"- Whisper model: {'PASS ' + str(model) if model.exists() else 'WARN not found yet'}")
     wrapper = piper_wrapper_path(paths["root"])
     print(f"- Piper binary: {'PASS ' + str(wrapper) if wrapper.exists() else 'WARN not found yet'}")
