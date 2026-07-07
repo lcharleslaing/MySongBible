@@ -67,11 +67,14 @@ function startBackendProcess({ app, isDev }) {
   const host = process.env.ELECTRON_BACKEND_HOST || "127.0.0.1";
   const port = process.env.ELECTRON_BACKEND_PORT || "8000";
   const baseUrl = process.env.ELECTRON_BACKEND_BASE_URL || `http://${host}:${port}`;
+  const appDataDir = process.env.APP_DATA_DIR || path.join(app.getPath("userData"), "data");
+
   const env = {
     ...process.env,
     BACKEND_HOST: process.env.BACKEND_HOST || host,
     BACKEND_PORT: process.env.BACKEND_PORT || port,
-    APP_DATA_DIR: process.env.APP_DATA_DIR || path.join(app.getPath("userData"), "data"),
+    APP_DATA_DIR: appDataDir,
+    DATABASE_URL: process.env.DATABASE_URL || (isDev ? undefined : `sqlite:///${path.join(appDataDir, "app_template_base.sqlite3")}`),
     LOG_DIR: process.env.LOG_DIR || logsDir,
   };
 
