@@ -1,9 +1,9 @@
 {
-  "name": "video_creator",
+  "name": "apptemplatebase",
   "private": true,
   "version": "0.1.0",
   "description": "Reusable local-first Electron, React, and FastAPI desktop starter.",
-  "desktopName": "video_creator",
+  "desktopName": "apptemplatebase",
   "author": {
     "name": "Local Developer",
     "email": "local@example.com"
@@ -17,7 +17,7 @@
     "frontend"
   ],
   "scripts": {
-    "start": "node scripts/dev/bootstrap-start.cjs",
+    "start": "export DISPLAY=:1 && node scripts/dev/bootstrap-start.cjs",
     "start:bootstrap-only": "node scripts/dev/bootstrap-start.cjs --bootstrap-only",
     "template:init": "node scripts/template/init-template.cjs --force",
     "template:init:check": "node scripts/template/init-template.cjs --dry-run",
@@ -42,8 +42,8 @@
     "package:linux:reinstall": "npm run package:linux && npm run reinstall:linux"
   },
   "build": {
-    "appId": "com.localfirst.video_creator",
-    "productName": "Video Creator",
+    "appId": "com.localfirst.apptemplatebase",
+    "productName": "App Template Base",
     "directories": {
       "output": "release"
     },
