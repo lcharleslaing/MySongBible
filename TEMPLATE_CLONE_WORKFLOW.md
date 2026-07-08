@@ -226,3 +226,55 @@ template = AppTemplateBase
 ```
 
 This keeps every app independent while still allowing base template fixes to be merged later.
+
+---
+
+## 9. Test the template-update workflow
+
+A simple test is to make a small documentation change in `AppTemplateBase`, push it, then pull it into a cloned app.
+
+### In AppTemplateBase
+
+    cd ~/Programming/AppTemplateBase
+    git status
+    git add TEMPLATE_CLONE_WORKFLOW.md
+    git commit -m "Update template clone workflow documentation"
+    git push
+
+### In the cloned app
+
+Example:
+
+    cd ~/Programming/SunoSongWriter
+    git fetch template
+    git log --oneline HEAD..template/main
+
+If the template has new commits, you should see them listed, for example:
+
+    31cec1c Add template clone workflow documentation
+
+Then merge the template update:
+
+    git merge template/main
+
+Then push the cloned app to its own repo:
+
+    git push
+
+That proves the full workflow works:
+
+    AppTemplateBase changed
+            ↓
+    Cloned app fetched from template
+            ↓
+    Cloned app merged template/main
+            ↓
+    Cloned app pushed to its own origin
+
+### Important
+
+`git fetch template` only downloads the latest template history.
+
+`git log --oneline HEAD..template/main` only shows what updates are available.
+
+`git merge template/main` is the step that actually pulls those updates into the cloned app.
