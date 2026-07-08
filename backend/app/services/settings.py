@@ -46,7 +46,7 @@ APP_DEFINITION_DEFAULTS = {
 }
 
 DEVICE_PROFILE_PREFIX = "device_profile."
-DEVICE_PROFILE_FILE = PROJECT_ROOT / "shared" / "config" / "device-profiles.json"
+DEVICE_PROFILE_FILE = Path.home() / ".config" / "apptemplatebase" / "device-profiles.json"
 
 
 class SettingsService:
