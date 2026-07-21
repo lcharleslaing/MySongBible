@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import {
@@ -65,6 +66,19 @@ type PackageStatus = {
     version: string | null;
   };
 };
+
+type ReadinessState = "Ready" | "Not Ready" | "Checking" | "Error";
+
+function readinessBadge(state: ReadinessState) {
+  const badgeClass = {
+    Ready: "badge-success",
+    "Not Ready": "badge-warning",
+    Checking: "badge-ghost",
+    Error: "badge-error",
+  }[state];
+
+  return <span className={`badge ${badgeClass}`}>{state}</span>;
+}
 
 const initialFormState: FormState = {
   packageName: "apptemplatebase",
@@ -292,6 +306,27 @@ export function SettingsPage() {
   const packageActionRunning = Boolean(packageStatus?.running);
   const newestDebArtifact = packageStatus ? findNewestDebArtifact(packageStatus.artifacts) : null;
   const installCommand = newestDebArtifact ? `sudo apt install -y ${shellQuote(newestDebArtifact.path)}` : "";
+  const backendReadiness: ReadinessState = statusError
+    ? "Error"
+    : isLoading
+      ? "Checking"
+      : backendHealth === "ok"
+        ? "Ready"
+        : "Not Ready";
+  const whisperReadiness: ReadinessState = statusError
+    ? "Error"
+    : isLoading || !voiceStatus
+      ? "Checking"
+      : voiceStatus.stt_ready
+        ? "Ready"
+        : "Not Ready";
+  const piperReadiness: ReadinessState = statusError
+    ? "Error"
+    : isLoading || !voiceStatus
+      ? "Checking"
+      : piperStatus?.available
+        ? "Ready"
+        : "Not Ready";
 
   useEffect(() => {
     let cancelled = false;
@@ -546,13 +581,78 @@ export function SettingsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Settings"
-        title="Local settings management"
-        description="Define the cloned app identity, then tune local runtime paths. App Definition also updates project metadata files."
+        title="Application settings"
+        description="Manage everyday preferences, voice and audio tools, local AI, and developer-only template features."
       />
+
+      <section aria-labelledby="settings-destinations" className="space-y-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Configuration</p>
+          <h2 id="settings-destinations" className="mt-1 text-2xl font-semibold">Settings and tools</h2>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <article className="card border border-base-300 bg-base-100 shadow-sm">
+            <div className="card-body">
+              <h3 className="card-title">Voice and Audio</h3>
+              <p className="text-sm text-base-content/70">
+                Record or upload audio, transcribe speech, and synthesize speech with configured engines. Piper is a local text-to-speech engine, not voice cloning.
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2" aria-label="Voice and audio readiness">
+                {readinessBadge(whisperReadiness)}
+                <span className="text-sm text-base-content/70">Whisper STT</span>
+                {readinessBadge(piperReadiness)}
+                <span className="text-sm text-base-content/70">Piper TTS</span>
+              </div>
+              <div className="card-actions mt-auto justify-end">
+                <Link to="/voice-lab" className="btn btn-primary btn-sm">Open Voice Lab</Link>
+              </div>
+            </div>
+          </article>
+
+          <article className="card border border-base-300 bg-base-100 shadow-sm">
+            <div className="card-body">
+              <h3 className="card-title">Local AI</h3>
+              <p className="text-sm text-base-content/70">
+                Configure local model paths, providers, runtime services, and test actions in the full setup interface.
+              </p>
+              <dl className="mt-1 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 text-sm">
+                <dt>Whisper STT</dt><dd>{readinessBadge(whisperReadiness)}</dd>
+                <dt>Piper TTS</dt><dd>{readinessBadge(piperReadiness)}</dd>
+                <dt>Local AI Chat</dt><dd>{readinessBadge("Not Ready")}</dd>
+                <dt>Backend service</dt><dd>{readinessBadge(backendReadiness)}</dd>
+              </dl>
+              <div className="card-actions mt-auto justify-end">
+                <Link to="/local-ai-setup" className="btn btn-primary btn-sm">Open Local AI Setup</Link>
+              </div>
+            </div>
+          </article>
+
+          <article className="card border border-warning/50 bg-warning/5 shadow-sm md:col-span-2 xl:col-span-1">
+            <div className="card-body">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="card-title">Template Tools</h3>
+                <span className="badge badge-warning">Developer tool</span>
+              </div>
+              <p className="text-sm text-base-content/70">
+                Clone App creates a new application from AppTemplateBase. It is intended for template maintainers and developers, not normal day-to-day use.
+              </p>
+              <div className="card-actions mt-auto justify-end">
+                <Link to="/clone-app" className="btn btn-warning btn-sm">Open Clone App</Link>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
         <div className="card border border-base-300 bg-base-100 shadow-sm xl:col-span-2">
           <div className="card-body gap-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">General</p>
+              <h2 className="mt-1 text-xl font-semibold">Application and storage preferences</h2>
+              <p className="mt-1 text-sm text-base-content/70">Manage the existing application identity, device, runtime path, and storage settings below.</p>
+            </div>
             {isLoading ? (
               <div className="alert">
                 <span className="loading loading-spinner loading-sm" />
