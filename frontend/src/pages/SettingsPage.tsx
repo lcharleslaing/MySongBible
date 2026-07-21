@@ -16,6 +16,7 @@ import {
 import { getBackendHealth, getVoiceStatus, type VoiceStatusRecord } from "../api/system";
 import { PageHeader } from "../components/ui/PageHeader";
 import { useAppDefinition } from "../context/AppDefinitionContext";
+import { AppLockSettings } from "../components/app-lock/AppLockSettings";
 
 type FormState = {
   packageName: string;
@@ -610,6 +611,8 @@ export function SettingsPage() {
         title="Application settings"
         description="Manage everyday preferences, voice and audio tools, local AI, and developer-only template features."
       />
+
+      <AppLockSettings />
 
       <section aria-labelledby="settings-destinations" className="space-y-3">
         <div>

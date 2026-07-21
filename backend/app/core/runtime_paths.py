@@ -42,6 +42,10 @@ class RuntimePaths:
         return self.root / "settings"
 
     @property
+    def app_lock_config(self) -> Path:
+        return self.settings / "app-lock.json"
+
+    @property
     def profiles(self) -> Path:
         return self.root / "profiles"
 

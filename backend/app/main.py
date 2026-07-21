@@ -9,8 +9,26 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.init import initialize_database
+from app.services.app_lock import app_lock_service
 
 logger = logging.getLogger(__name__)
+
+
+class AppLockMiddleware:
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            status = app_lock_service.status()
+            path = scope.get("path", "")
+            allowed = path.startswith("/api/app-lock/") or path == "/api/health"
+            if status["enabled"] and not status["unlocked"] and not allowed:
+                body = b'{"detail":"App is locked."}'
+                await send({"type": "http.response.start", "status": 423, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
 
 
 @asynccontextmanager
@@ -40,6 +58,8 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(AppLockMiddleware)
 
     app.include_router(api_router, prefix="/api")
     return app

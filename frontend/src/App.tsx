@@ -8,10 +8,11 @@ import { SystemHealthPage } from "./pages/SystemHealthPage";
 import { LocalAiSetupPage } from "./pages/LocalAiSetupPage";
 import { AppClonerPage } from "./pages/AppClonerPage";
 import { AppDefinitionProvider } from "./context/AppDefinitionContext";
+import { AppLockGate } from "./components/app-lock/AppLockGate";
 
 function App() {
   return (
-    <AppDefinitionProvider>
+    <AppLockGate><AppDefinitionProvider>
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
@@ -24,7 +25,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
-    </AppDefinitionProvider>
+    </AppDefinitionProvider></AppLockGate>
   );
 }
 
