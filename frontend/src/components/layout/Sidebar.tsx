@@ -2,15 +2,9 @@ import { NavLink } from "react-router-dom";
 import { useAppDefinition } from "../../context/AppDefinitionContext";
 import appIconUrl from "../../../../electron/assets/icons/icon.png";
 
-const navItems = [
-  { to: "/", label: "Home" },
-  { to: "/audio-journal", label: "Audio Journal" },
-  { to: "/settings", label: "Settings" },
-  { to: "/system-health", label: "System Health" },
-];
-
 export function Sidebar() {
-  const { appDefinition } = useAppDefinition();
+  const { appDefinition, homePage } = useAppDefinition();
+  const navItems = [{ to: "/", label: "Home" }, ...homePage.apps.map((app) => ({ to: app.path, label: app.label }))];
 
   return (
     <div className="drawer-side z-40">

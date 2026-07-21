@@ -13,6 +13,8 @@ from app.schemas.settings import (
     DeviceProfileApplyRequest,
     DeviceSettingsProfile,
     PublicSettingsResponse,
+    HomePageSettings,
+    HomePageSettingsUpdateRequest,
     SettingsUpdateRequest,
 )
 
@@ -43,6 +45,18 @@ APP_DEFINITION_DEFAULTS = {
     "home_eyebrow": "Overview",
     "home_title": "Reusable local-first desktop starter",
     "home_description": "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
+}
+
+HOME_PAGE_DEFAULTS = {
+    "show_marketing_on_startup": True,
+    "marketing_eyebrow": "Built for local work",
+    "marketing_title": "Everything you need, right where you left it.",
+    "marketing_description": "A private, local-first workspace that brings your everyday tools together without getting in the way.",
+    "apps": [
+        {"id": "audio-journal", "label": "Audio Journal", "description": "Record, review, and organize spoken notes.", "path": "/audio-journal", "badge": "Capture"},
+        {"id": "settings", "label": "Settings", "description": "Personalize the app and configure this device.", "path": "/settings", "badge": "Configure"},
+        {"id": "system-health", "label": "System Health", "description": "Check local services and runtime readiness.", "path": "/system-health", "badge": "Monitor"},
+    ],
 }
 
 DEVICE_PROFILE_PREFIX = "device_profile."
@@ -84,6 +98,7 @@ class SettingsService:
             app_name=self.base_settings.app_name,
             app_env=self.base_settings.app_env,
             app_definition=self._get_app_definition(overrides),
+            home_page=self._get_home_page_settings(overrides),
             current_device_name=self._current_device_name(),
             selected_device_name=overrides.get("selected_device_name", self._current_device_name()),
             device_profiles=self._get_device_profiles(overrides),
@@ -159,6 +174,11 @@ class SettingsService:
         self.session.commit()
         return self.get_public_settings()
 
+    def update_home_page(self, payload: HomePageSettingsUpdateRequest) -> PublicSettingsResponse:
+        self._upsert_setting("home_page", payload.model_dump_json())
+        self.session.commit()
+        return self.get_public_settings()
+
     def get_runtime_settings(self) -> Settings:
         public_settings = self.get_public_settings()
         return self.base_settings.model_copy(
@@ -196,6 +216,15 @@ class SettingsService:
                 values[key] = override_value
 
         return AppDefinition(**values)
+
+    def _get_home_page_settings(self, overrides: dict[str, str]) -> HomePageSettings:
+        raw_value = overrides.get("home_page")
+        if raw_value:
+            try:
+                return HomePageSettings.model_validate_json(raw_value)
+            except ValueError:
+                pass
+        return HomePageSettings(**HOME_PAGE_DEFAULTS)
 
     def _get_device_profiles(self, overrides: dict[str, str]) -> list[DeviceSettingsProfile]:
         raw_profiles = self._read_device_profile_file()

@@ -15,6 +15,26 @@ class AppDefinition(BaseModel):
     home_description: str
 
 
+class HomeApp(BaseModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
+    label: str = Field(min_length=1, max_length=80)
+    description: str = Field(min_length=1, max_length=180)
+    path: str = Field(min_length=1, max_length=120, pattern=r"^/")
+    badge: str = Field(default="App", min_length=1, max_length=40)
+
+
+class HomePageSettings(BaseModel):
+    show_marketing_on_startup: bool = True
+    marketing_eyebrow: str = Field(min_length=1, max_length=80)
+    marketing_title: str = Field(min_length=1, max_length=120)
+    marketing_description: str = Field(min_length=1, max_length=320)
+    apps: list[HomeApp] = Field(max_length=20)
+
+
+class HomePageSettingsUpdateRequest(HomePageSettings):
+    pass
+
+
 class DeviceSettingsProfile(BaseModel):
     device_name: str
     whisper_cpp_binary: str | None = None
@@ -54,6 +74,7 @@ class PublicSettingsResponse(BaseModel):
     app_name: str
     app_env: str
     app_definition: AppDefinition
+    home_page: HomePageSettings
     current_device_name: str
     selected_device_name: str
     device_profiles: list[DeviceSettingsProfile]

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.schemas.settings import (
     AppDefinitionUpdateRequest,
+    HomePageSettingsUpdateRequest,
     DeviceProfileApplyRequest,
     DeviceSettingsProfile,
     PublicSettingsResponse,
@@ -38,6 +39,14 @@ async def update_app_definition_route(
         return settings_service.update_app_definition(payload)
     except AppDefinitionApplyError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.put("/settings/home-page", response_model=PublicSettingsResponse)
+async def update_home_page_route(
+    payload: HomePageSettingsUpdateRequest,
+    settings_service: SettingsService = Depends(get_settings_service),
+) -> PublicSettingsResponse:
+    return settings_service.update_home_page(payload)
 
 
 @router.put("/settings/device-profile", response_model=PublicSettingsResponse)

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { getSettings, type AppDefinitionRecord } from "../api/settings";
+import { getSettings, type AppDefinitionRecord, type HomePageSettingsRecord } from "../api/settings";
 
 const defaultAppDefinition: AppDefinitionRecord = {
   package_name: "apptemplatebase",
@@ -16,20 +16,36 @@ const defaultAppDefinition: AppDefinitionRecord = {
   home_description: "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
 };
 
+export const defaultHomePageSettings: HomePageSettingsRecord = {
+  show_marketing_on_startup: true,
+  marketing_eyebrow: "Built for local work",
+  marketing_title: "Everything you need, right where you left it.",
+  marketing_description: "A private, local-first workspace that brings your everyday tools together without getting in the way.",
+  apps: [
+    { id: "audio-journal", label: "Audio Journal", description: "Record, review, and organize spoken notes.", path: "/audio-journal", badge: "Capture" },
+    { id: "settings", label: "Settings", description: "Personalize the app and configure this device.", path: "/settings", badge: "Configure" },
+    { id: "system-health", label: "System Health", description: "Check local services and runtime readiness.", path: "/system-health", badge: "Monitor" },
+  ],
+};
+
 type AppDefinitionContextValue = {
   appDefinition: AppDefinitionRecord;
+  homePage: HomePageSettingsRecord;
   refreshAppDefinition: () => Promise<void>;
   setAppDefinition: (definition: AppDefinitionRecord) => void;
+  setHomePage: (settings: HomePageSettingsRecord) => void;
 };
 
 const AppDefinitionContext = createContext<AppDefinitionContextValue | null>(null);
 
 export function AppDefinitionProvider({ children }: { children: ReactNode }) {
   const [appDefinition, setAppDefinition] = useState<AppDefinitionRecord>(defaultAppDefinition);
+  const [homePage, setHomePage] = useState<HomePageSettingsRecord>(defaultHomePageSettings);
 
   const refreshAppDefinition = async () => {
     const settings = await getSettings();
     setAppDefinition(settings.app_definition);
+    setHomePage(settings.home_page);
   };
 
   useEffect(() => {
@@ -41,10 +57,12 @@ export function AppDefinitionProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       appDefinition,
+      homePage,
       refreshAppDefinition,
       setAppDefinition,
+      setHomePage,
     }),
-    [appDefinition],
+    [appDefinition, homePage],
   );
 
   return (

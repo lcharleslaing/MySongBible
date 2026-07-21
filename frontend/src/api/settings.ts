@@ -4,6 +4,7 @@ export type SettingsRecord = {
   app_name: string;
   app_env: string;
   app_definition: AppDefinitionRecord;
+  home_page: HomePageSettingsRecord;
   current_device_name: string;
   selected_device_name: string;
   device_profiles: DeviceSettingsProfileRecord[];
@@ -52,6 +53,22 @@ export type AppDefinitionRecord = {
   home_description: string;
 };
 
+export type HomeAppRecord = {
+  id: string;
+  label: string;
+  description: string;
+  path: string;
+  badge: string;
+};
+
+export type HomePageSettingsRecord = {
+  show_marketing_on_startup: boolean;
+  marketing_eyebrow: string;
+  marketing_title: string;
+  marketing_description: string;
+  apps: HomeAppRecord[];
+};
+
 export type SettingsUpdatePayload = {
   whisper_cpp_binary: string | null;
   whisper_model_path: string | null;
@@ -90,6 +107,15 @@ export async function updateAppDefinition(payload: AppDefinitionRecord) {
     body: JSON.stringify(payload),
   });
 
+  return parseJsonResponse<SettingsRecord>(response);
+}
+
+export async function updateHomePage(payload: HomePageSettingsRecord) {
+  const response = await fetch(await buildApiUrl("/api/settings/home-page"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   return parseJsonResponse<SettingsRecord>(response);
 }
 

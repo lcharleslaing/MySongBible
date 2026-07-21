@@ -16,6 +16,7 @@ import { getBackendHealth, getVoiceStatus, type VoiceStatusRecord } from "../api
 import { PageHeader } from "../components/ui/PageHeader";
 import { useAppDefinition } from "../context/AppDefinitionContext";
 import { AppLockSettings } from "../components/app-lock/AppLockSettings";
+import { HomePageSettingsCard } from "../components/settings/HomePageSettingsCard";
 
 type FormState = {
   packageName: string;
@@ -842,6 +843,7 @@ export function SettingsPage() {
                 <button type="button" className="modal-backdrop" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)}>close</button>
               </dialog>
             ) : null}
+            <HomePageSettingsCard disabled={isLoading || isSaving} />
             <div className="rounded-box border border-base-300 bg-base-200/40 p-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div><p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Local Machine</p><h2 className="mt-1 text-xl font-semibold">Device, voice and storage</h2><p className="mt-1 text-sm text-base-content/60">{formState.deviceName || "This device"} · Whisper {formState.whisperThreadCount} threads · {formState.ttsEngine === "piper" ? "Piper TTS" : "Mock TTS"}</p></div>

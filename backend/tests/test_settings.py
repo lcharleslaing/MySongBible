@@ -15,6 +15,32 @@ def test_settings_endpoint(client) -> None:
     assert "whisper_thread_count" in payload
     assert "audio_input_dir" in payload
     assert "tts_output_dir" in payload
+    assert payload["home_page"]["show_marketing_on_startup"] is True
+    assert len(payload["home_page"]["apps"]) >= 1
+
+
+def test_home_page_settings_can_be_updated(client) -> None:
+    payload = {
+        "show_marketing_on_startup": False,
+        "marketing_eyebrow": "Welcome",
+        "marketing_title": "Your local workspace",
+        "marketing_description": "Open an app to get started.",
+        "apps": [
+            {
+                "id": "settings",
+                "label": "Preferences",
+                "description": "Configure this workspace.",
+                "path": "/settings",
+                "badge": "Configure",
+            }
+        ],
+    }
+
+    response = client.put("/api/settings/home-page", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["home_page"] == payload
+    assert client.get("/api/settings").json()["home_page"] == payload
 
 
 def test_settings_loads_csv_list_values_from_env_file(tmp_path) -> None:
