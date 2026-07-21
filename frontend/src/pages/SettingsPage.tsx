@@ -69,6 +69,25 @@ type PackageStatus = {
 };
 
 type ReadinessState = "Ready" | "Not Ready" | "Checking" | "Error";
+type IdentityStep = 0 | 1 | 2 | 3;
+
+const identityKeys = [
+  "packageName", "appVersion", "appDisplayName", "sidebarEyebrow", "sidebarTitle",
+  "sidebarDescription", "topbarEyebrow", "topbarTitle", "homeEyebrow", "homeTitle", "homeDescription",
+] as const;
+
+const identityStepKeys: Record<IdentityStep, readonly (keyof FormState)[]> = {
+  0: ["packageName", "appVersion", "appDisplayName"],
+  1: ["sidebarEyebrow", "sidebarTitle", "sidebarDescription", "topbarEyebrow", "topbarTitle"],
+  2: ["homeEyebrow", "homeTitle", "homeDescription"],
+  3: [],
+};
+
+function mergeIdentity(target: FormState, source: FormState): FormState {
+  const merged = { ...target };
+  identityKeys.forEach((key) => { merged[key] = source[key]; });
+  return merged;
+}
 
 function readinessBadge(state: ReadinessState) {
   const badgeClass = {
@@ -300,6 +319,11 @@ export function SettingsPage() {
   const [iconMessage, setIconMessage] = useState("");
   const [isPickingIcon, setIsPickingIcon] = useState(false);
   const [databasePathNote, setDatabasePathNote] = useState("SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database.");
+  const [identityStep, setIdentityStep] = useState<IdentityStep>(0);
+  const [identityDraft, setIdentityDraft] = useState<FormState>(initialFormState);
+  const [isIdentityOpen, setIsIdentityOpen] = useState(false);
+  const [identityError, setIdentityError] = useState("");
+  const [identityMessage, setIdentityMessage] = useState("");
 
   const formErrors = useMemo(() => validateForm(formState), [formState]);
   const formWarnings = useMemo(() => buildWarnings(formState), [formState]);
@@ -395,6 +419,50 @@ export function SettingsPage() {
     setSaveError("");
   };
 
+  const openIdentityEditor = () => {
+    setIdentityDraft(formState);
+    setIdentityStep(0);
+    setIdentityError("");
+    setIdentityMessage("");
+    setIsIdentityOpen(true);
+  };
+
+  const setIdentityField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setIdentityDraft((current) => ({ ...current, [key]: value }));
+    setIdentityError("");
+  };
+
+  const saveIdentityStep = async () => {
+    const errors = validateForm(identityDraft);
+    const stepError = identityStepKeys[identityStep].find((key) => errors[key]);
+    if (stepError) {
+      setIdentityError(errors[stepError] || "Complete the required fields before continuing.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setIdentityError("");
+      if (identityStep < 3) {
+        const saved = await updateAppDefinition(buildAppDefinitionPayload(identityDraft));
+        const savedIdentity = buildFormState(saved);
+        setAppDefinition(saved.app_definition);
+        setFormState((current) => mergeIdentity(current, savedIdentity));
+        setSavedState((current) => mergeIdentity(current, savedIdentity));
+        setIdentityDraft((current) => mergeIdentity(current, savedIdentity));
+        setIdentityMessage(`${["Basics", "Navigation", "Home screen"][identityStep]} saved.`);
+        setIdentityStep((identityStep + 1) as IdentityStep);
+      } else {
+        setIsIdentityOpen(false);
+        setStatusMessage("App Identity is up to date.");
+      }
+    } catch (error) {
+      setIdentityError(error instanceof Error ? error.message : "Could not save App Identity.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const runPackageAction = async (action: "build" | "reinstall" | "buildAndReinstall") => {
     try {
       setPackageError("");
@@ -473,13 +541,11 @@ export function SettingsPage() {
       setSaveError("");
       setStatusMessage("Saving settings...");
       const saved = await updateSettings(buildPayload(formState));
-      const savedWithDefinition = await updateAppDefinition(buildAppDefinitionPayload(formState));
-      setAppDefinition(savedWithDefinition.app_definition);
-      const nextFormState = buildFormState(savedWithDefinition || saved);
+      const nextFormState = mergeIdentity(buildFormState(saved), formState);
       setFormState(nextFormState);
       setSavedState(nextFormState);
-      setDeviceProfiles(savedWithDefinition.device_profiles);
-      setStatusMessage("Settings saved. App definition files were updated for this clone.");
+      setDeviceProfiles(saved.device_profiles);
+      setStatusMessage("Local settings saved.");
       const voice = await getVoiceStatus();
       setVoiceStatus(voice);
     } catch (error) {
@@ -701,178 +767,89 @@ export function SettingsPage() {
               </div>
             ) : null}
 
-            <div className="space-y-5 rounded-box border border-base-300 bg-base-200/40 p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">App Definition</p>
-                <h2 className="mt-2 text-xl font-semibold text-base-content">Clone identity</h2>
-                <p className="mt-1 text-sm text-base-content/70">
-                  These fields make a cloned project feel like its own app. Saving updates the live UI plus package metadata and starter project files.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-4 rounded-box border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center">
-                <div className="avatar">
-                  <div className="h-24 w-24 rounded-2xl bg-base-300 shadow-sm">
-                    {appIcon?.dataUrl ? <img src={appIcon.dataUrl} alt="Current application icon" /> : null}
+            <div className="rounded-box border border-base-300 bg-base-200/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="avatar">
+                    <div className="h-14 w-14 rounded-xl bg-base-300 shadow-sm">
+                      {appIcon?.dataUrl ? <img src={appIcon.dataUrl} alt="Current application icon" /> : null}
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">App Identity</p>
+                    <h2 className="mt-1 truncate text-xl font-semibold text-base-content">{formState.appDisplayName}</h2>
+                    <p className="truncate text-sm text-base-content/60">{formState.packageName} · v{formState.appVersion}</p>
                   </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold">App Icon</h3>
-                  <p className="mt-1 text-sm text-base-content/70">
-                    Choose a PNG, JPEG, or WebP image at least 512 x 512 pixels. It will be center-cropped and converted into every icon size used by the desktop window, Linux build, package, and installed application.
-                  </p>
-                  {appIcon?.path ? <p className="mt-2 truncate font-mono text-xs text-base-content/50">{appIcon.path}</p> : null}
-                  {iconMessage ? <p className={`mt-2 text-sm ${appIcon?.ok === false ? "text-error" : "text-info"}`}>{iconMessage}</p> : null}
-                </div>
-                <button
-                  type="button"
-                  className={`btn btn-outline btn-sm ${isPickingIcon ? "loading" : ""}`}
-                  onClick={pickAppIcon}
-                  disabled={isPickingIcon || !window.desktop}
-                >
-                  Choose Icon
+                <button type="button" className="btn btn-primary btn-sm" onClick={openIdentityEditor} disabled={isLoading || isSaving}>
+                  Edit
                 </button>
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-2">
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Package Name</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.packageName ? "input-error" : ""}`}
-                    value={formState.packageName}
-                    onChange={(event) => setField("packageName", event.target.value)}
-                    disabled={isLoading || isSaving}
-                    placeholder="my-new-app"
-                  />
-                  {formErrors.packageName ? <span className="label-text-alt text-error">{formErrors.packageName}</span> : null}
-                  <span className="label-text-alt text-base-content/60">Updates root and frontend package metadata.</span>
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Version</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.appVersion ? "input-error" : ""}`}
-                    value={formState.appVersion}
-                    onChange={(event) => setField("appVersion", event.target.value)}
-                    disabled={isLoading || isSaving}
-                    placeholder="0.1.0"
-                  />
-                  {formErrors.appVersion ? <span className="label-text-alt text-error">{formErrors.appVersion}</span> : null}
-                </label>
-
-                <label className="form-control gap-2 lg:col-span-2">
-                  <span className="label-text font-medium">App Display Name</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.appDisplayName ? "input-error" : ""}`}
-                    value={formState.appDisplayName}
-                    onChange={(event) => setField("appDisplayName", event.target.value)}
-                    disabled={isLoading || isSaving}
-                    placeholder="My New App"
-                  />
-                  {formErrors.appDisplayName ? <span className="label-text-alt text-error">{formErrors.appDisplayName}</span> : null}
-                  <span className="label-text-alt text-base-content/60">Updates the browser title, README title, and environment examples.</span>
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Sidebar Eyebrow</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.sidebarEyebrow ? "input-error" : ""}`}
-                    value={formState.sidebarEyebrow}
-                    onChange={(event) => setField("sidebarEyebrow", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.sidebarEyebrow ? <span className="label-text-alt text-error">{formErrors.sidebarEyebrow}</span> : null}
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Sidebar Title</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.sidebarTitle ? "input-error" : ""}`}
-                    value={formState.sidebarTitle}
-                    onChange={(event) => setField("sidebarTitle", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.sidebarTitle ? <span className="label-text-alt text-error">{formErrors.sidebarTitle}</span> : null}
-                </label>
-
-                <label className="form-control gap-2 lg:col-span-2">
-                  <span className="label-text font-medium">Sidebar Description</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.sidebarDescription ? "input-error" : ""}`}
-                    value={formState.sidebarDescription}
-                    onChange={(event) => setField("sidebarDescription", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.sidebarDescription ? <span className="label-text-alt text-error">{formErrors.sidebarDescription}</span> : null}
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Topbar Eyebrow</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.topbarEyebrow ? "input-error" : ""}`}
-                    value={formState.topbarEyebrow}
-                    onChange={(event) => setField("topbarEyebrow", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.topbarEyebrow ? <span className="label-text-alt text-error">{formErrors.topbarEyebrow}</span> : null}
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Topbar Title</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.topbarTitle ? "input-error" : ""}`}
-                    value={formState.topbarTitle}
-                    onChange={(event) => setField("topbarTitle", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.topbarTitle ? <span className="label-text-alt text-error">{formErrors.topbarTitle}</span> : null}
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Home Eyebrow</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.homeEyebrow ? "input-error" : ""}`}
-                    value={formState.homeEyebrow}
-                    onChange={(event) => setField("homeEyebrow", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.homeEyebrow ? <span className="label-text-alt text-error">{formErrors.homeEyebrow}</span> : null}
-                </label>
-
-                <label className="form-control gap-2">
-                  <span className="label-text font-medium">Home Title</span>
-                  <input
-                    type="text"
-                    className={`input input-bordered ${formErrors.homeTitle ? "input-error" : ""}`}
-                    value={formState.homeTitle}
-                    onChange={(event) => setField("homeTitle", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.homeTitle ? <span className="label-text-alt text-error">{formErrors.homeTitle}</span> : null}
-                </label>
-
-                <label className="form-control gap-2 lg:col-span-2">
-                  <span className="label-text font-medium">Home Description</span>
-                  <textarea
-                    className={`textarea textarea-bordered min-h-24 ${formErrors.homeDescription ? "textarea-error" : ""}`}
-                    value={formState.homeDescription}
-                    onChange={(event) => setField("homeDescription", event.target.value)}
-                    disabled={isLoading || isSaving}
-                  />
-                  {formErrors.homeDescription ? <span className="label-text-alt text-error">{formErrors.homeDescription}</span> : null}
-                </label>
               </div>
             </div>
 
+            {isIdentityOpen ? (
+              <dialog className="modal modal-open" aria-labelledby="app-identity-title">
+                <div className="modal-box max-w-3xl">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">App Identity</p>
+                      <h2 id="app-identity-title" className="mt-1 text-2xl font-semibold">Edit app identity</h2>
+                      <p className="mt-1 text-sm text-base-content/60">Each step is saved before you continue.</p>
+                    </div>
+                    <button type="button" className="btn btn-circle btn-ghost btn-sm" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)} disabled={isSaving}>✕</button>
+                  </div>
+
+                  <ul className="steps steps-horizontal my-6 w-full text-xs">
+                    {["Basics", "Navigation", "Home", "Icon"].map((label, index) => (
+                      <li key={label} className={`step ${index <= identityStep ? "step-primary" : ""}`}>{label}</li>
+                    ))}
+                  </ul>
+
+                  {identityMessage ? <div className="alert alert-success mb-4 py-3 text-sm">{identityMessage}</div> : null}
+                  {identityError ? <div className="alert alert-error mb-4 py-3 text-sm">{identityError}</div> : null}
+
+                  {identityStep === 0 ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="form-control gap-2"><span className="label-text font-medium">Package Name</span><input autoFocus type="text" className={`input input-bordered ${validateForm(identityDraft).packageName ? "input-error" : ""}`} value={identityDraft.packageName} onChange={(event) => setIdentityField("packageName", event.target.value)} /><span className="label-text-alt">Lowercase npm-safe name.</span></label>
+                      <label className="form-control gap-2"><span className="label-text font-medium">Version</span><input type="text" className={`input input-bordered ${validateForm(identityDraft).appVersion ? "input-error" : ""}`} value={identityDraft.appVersion} onChange={(event) => setIdentityField("appVersion", event.target.value)} placeholder="0.1.0" /></label>
+                      <label className="form-control gap-2 md:col-span-2"><span className="label-text font-medium">App Display Name</span><input type="text" className={`input input-bordered ${validateForm(identityDraft).appDisplayName ? "input-error" : ""}`} value={identityDraft.appDisplayName} onChange={(event) => setIdentityField("appDisplayName", event.target.value)} /></label>
+                    </div>
+                  ) : null}
+
+                  {identityStep === 1 ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="form-control gap-2"><span className="label-text font-medium">Sidebar Eyebrow</span><input autoFocus className="input input-bordered" value={identityDraft.sidebarEyebrow} onChange={(event) => setIdentityField("sidebarEyebrow", event.target.value)} /></label>
+                      <label className="form-control gap-2"><span className="label-text font-medium">Sidebar Title</span><input className="input input-bordered" value={identityDraft.sidebarTitle} onChange={(event) => setIdentityField("sidebarTitle", event.target.value)} /></label>
+                      <label className="form-control gap-2 md:col-span-2"><span className="label-text font-medium">Sidebar Description</span><input className="input input-bordered" value={identityDraft.sidebarDescription} onChange={(event) => setIdentityField("sidebarDescription", event.target.value)} /></label>
+                      <label className="form-control gap-2"><span className="label-text font-medium">Topbar Eyebrow</span><input className="input input-bordered" value={identityDraft.topbarEyebrow} onChange={(event) => setIdentityField("topbarEyebrow", event.target.value)} /></label>
+                      <label className="form-control gap-2"><span className="label-text font-medium">Topbar Title</span><input className="input input-bordered" value={identityDraft.topbarTitle} onChange={(event) => setIdentityField("topbarTitle", event.target.value)} /></label>
+                    </div>
+                  ) : null}
+
+                  {identityStep === 2 ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="form-control gap-2"><span className="label-text font-medium">Home Eyebrow</span><input autoFocus className="input input-bordered" value={identityDraft.homeEyebrow} onChange={(event) => setIdentityField("homeEyebrow", event.target.value)} /></label>
+                      <label className="form-control gap-2"><span className="label-text font-medium">Home Title</span><input className="input input-bordered" value={identityDraft.homeTitle} onChange={(event) => setIdentityField("homeTitle", event.target.value)} /></label>
+                      <label className="form-control gap-2 md:col-span-2"><span className="label-text font-medium">Home Description</span><textarea className="textarea textarea-bordered min-h-28" value={identityDraft.homeDescription} onChange={(event) => setIdentityField("homeDescription", event.target.value)} /></label>
+                    </div>
+                  ) : null}
+
+                  {identityStep === 3 ? (
+                    <div className="flex flex-col items-center gap-5 rounded-box border border-base-300 bg-base-200/40 p-6 text-center sm:flex-row sm:text-left">
+                      <div className="avatar"><div className="h-28 w-28 rounded-2xl bg-base-300 shadow-sm">{appIcon?.dataUrl ? <img src={appIcon.dataUrl} alt="Current application icon" /> : null}</div></div>
+                      <div className="flex-1"><h3 className="font-semibold">Application icon</h3><p className="mt-1 text-sm text-base-content/70">Choose a PNG, JPEG, or WebP image at least 512 × 512 pixels. Icon changes are applied when selected.</p>{iconMessage ? <p className={`mt-2 text-sm ${appIcon?.ok === false ? "text-error" : "text-success"}`}>{iconMessage}</p> : null}</div>
+                      <button type="button" className="btn btn-outline" onClick={pickAppIcon} disabled={isPickingIcon || !window.desktop}>{isPickingIcon ? "Choosing…" : "Choose Icon"}</button>
+                    </div>
+                  ) : null}
+
+                  <div className="modal-action mt-6 justify-between">
+                    <button type="button" className="btn btn-ghost" onClick={() => { setIdentityError(""); setIdentityMessage(""); setIdentityStep((identityStep - 1) as IdentityStep); }} disabled={identityStep === 0 || isSaving}>Back</button>
+                    <button type="button" className="btn btn-primary" onClick={saveIdentityStep} disabled={isSaving}>{isSaving ? "Saving…" : identityStep === 3 ? "Done" : "Save & Continue"}</button>
+                  </div>
+                </div>
+                <button type="button" className="modal-backdrop" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)}>close</button>
+              </dialog>
+            ) : null}
             <div className="space-y-5 rounded-box border border-base-300 bg-base-200/40 p-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Device Profiles</p>
