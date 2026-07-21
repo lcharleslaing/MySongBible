@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { ApiError } from "../api/client";
 import {
   applyDeviceProfile,
   getSettings,
@@ -70,6 +69,7 @@ type PackageStatus = {
 
 type ReadinessState = "Ready" | "Not Ready" | "Checking" | "Error";
 type IdentityStep = 0 | 1 | 2 | 3;
+type LocalSettingsStep = 0 | 1 | 2 | 3;
 
 const identityKeys = [
   "packageName", "appVersion", "appDisplayName", "sidebarEyebrow", "sidebarTitle",
@@ -324,11 +324,13 @@ export function SettingsPage() {
   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
   const [identityError, setIdentityError] = useState("");
   const [identityMessage, setIdentityMessage] = useState("");
+  const [localSettingsStep, setLocalSettingsStep] = useState<LocalSettingsStep>(0);
+  const [isLocalSettingsOpen, setIsLocalSettingsOpen] = useState(false);
+  const [localSettingsError, setLocalSettingsError] = useState("");
+  const [localSettingsMessage, setLocalSettingsMessage] = useState("");
 
   const formErrors = useMemo(() => validateForm(formState), [formState]);
   const formWarnings = useMemo(() => buildWarnings(formState), [formState]);
-  const hasValidationErrors = Object.keys(formErrors).length > 0;
-  const isDirty = JSON.stringify(formState) !== JSON.stringify(savedState);
   const piperStatus = findVoiceEngineStatus(voiceStatus, "piper");
   const mockStatus = findVoiceEngineStatus(voiceStatus, "mock");
   const packageActionRunning = Boolean(packageStatus?.running);
@@ -463,6 +465,52 @@ export function SettingsPage() {
     }
   };
 
+  const closeLocalSettings = () => {
+    setFormState(savedState);
+    setIsLocalSettingsOpen(false);
+    setLocalSettingsError("");
+    setLocalSettingsMessage("");
+  };
+
+  const saveLocalSettingsStep = async () => {
+    const stepKeys: Record<LocalSettingsStep, readonly (keyof FormState)[]> = {
+      0: ["deviceName"],
+      1: ["whisperThreadCount"],
+      2: ["ttsEngine", "ttsTimeoutSeconds"],
+      3: ["audioInputDirectory", "audioOutputDirectory", "sqliteDatabasePath"],
+    };
+    const errors = validateForm(formState);
+    const stepError = stepKeys[localSettingsStep].find((key) => errors[key]);
+    if (stepError) {
+      setLocalSettingsError(errors[stepError] || "Complete the required fields before continuing.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setLocalSettingsError("");
+      const saved = localSettingsStep === 0
+        ? await saveDeviceProfile(buildDeviceProfilePayload(formState))
+        : await updateSettings(buildPayload(formState));
+      const nextState = mergeIdentity(buildFormState(saved), formState);
+      setFormState(nextState);
+      setSavedState(nextState);
+      setDeviceProfiles(saved.device_profiles);
+      if (localSettingsStep < 3) {
+        setLocalSettingsMessage(`${["Device profile", "Speech-to-text", "Text-to-speech"][localSettingsStep]} saved.`);
+        setLocalSettingsStep((localSettingsStep + 1) as LocalSettingsStep);
+      } else {
+        setIsLocalSettingsOpen(false);
+        setStatusMessage("Local machine settings are up to date.");
+      }
+      setVoiceStatus(await getVoiceStatus());
+    } catch (error) {
+      setLocalSettingsError(error instanceof Error ? error.message : "Could not save local machine settings.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const runPackageAction = async (action: "build" | "reinstall" | "buildAndReinstall") => {
     try {
       setPackageError("");
@@ -526,62 +574,6 @@ export function SettingsPage() {
       setPackageError("");
     } catch {
       setPackageError("Could not copy automatically. Select the command text and copy it manually.");
-    }
-  };
-
-  const saveSettings = async () => {
-    const errors = validateForm(formState);
-    if (Object.keys(errors).length > 0) {
-      setSaveError("Fix the validation errors before saving.");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      setSaveError("");
-      setStatusMessage("Saving settings...");
-      const saved = await updateSettings(buildPayload(formState));
-      const nextFormState = mergeIdentity(buildFormState(saved), formState);
-      setFormState(nextFormState);
-      setSavedState(nextFormState);
-      setDeviceProfiles(saved.device_profiles);
-      setStatusMessage("Local settings saved.");
-      const voice = await getVoiceStatus();
-      setVoiceStatus(voice);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        setSaveError(error.message);
-      } else {
-        setSaveError(error instanceof Error ? error.message : "Could not save settings.");
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const saveCurrentDeviceProfile = async () => {
-    const errors = validateForm(formState);
-    if (Object.keys(errors).length > 0) {
-      setSaveError("Fix validation errors before saving a device profile.");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      setSaveError("");
-      setStatusMessage("Saving device profile...");
-      const saved = await saveDeviceProfile(buildDeviceProfilePayload(formState));
-      const nextFormState = buildFormState(saved);
-      setFormState(nextFormState);
-      setSavedState(nextFormState);
-      setDeviceProfiles(saved.device_profiles);
-      setStatusMessage(`Device profile saved for ${saved.selected_device_name}.`);
-      const voice = await getVoiceStatus();
-      setVoiceStatus(voice);
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Could not save device profile.");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -850,7 +842,20 @@ export function SettingsPage() {
                 <button type="button" className="modal-backdrop" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)}>close</button>
               </dialog>
             ) : null}
-            <div className="space-y-5 rounded-box border border-base-300 bg-base-200/40 p-4">
+            <div className="rounded-box border border-base-300 bg-base-200/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div><p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Local Machine</p><h2 className="mt-1 text-xl font-semibold">Device, voice and storage</h2><p className="mt-1 text-sm text-base-content/60">{formState.deviceName || "This device"} · Whisper {formState.whisperThreadCount} threads · {formState.ttsEngine === "piper" ? "Piper TTS" : "Mock TTS"}</p></div>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => { setLocalSettingsStep(0); setLocalSettingsError(""); setLocalSettingsMessage(""); setIsLocalSettingsOpen(true); }} disabled={isLoading || isSaving}>Edit</button>
+              </div>
+            </div>
+
+            {isLocalSettingsOpen ? <dialog className="modal modal-open" aria-labelledby="local-settings-title"><div className="modal-box max-w-4xl">
+              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Local Machine</p><h2 id="local-settings-title" className="mt-1 text-2xl font-semibold">Edit local settings</h2><p className="mt-1 text-sm text-base-content/60">Each step is saved before you continue.</p></div><button type="button" className="btn btn-circle btn-ghost btn-sm" onClick={closeLocalSettings} disabled={isSaving}>✕</button></div>
+              <ul className="steps steps-horizontal my-6 w-full text-xs">{["Device", "Speech-to-Text", "Text-to-Speech", "Storage"].map((label, index) => <li key={label} className={`step ${index <= localSettingsStep ? "step-primary" : ""}`}>{label}</li>)}</ul>
+              {localSettingsMessage ? <div className="alert alert-success mb-4 py-3 text-sm">{localSettingsMessage}</div> : null}
+              {localSettingsError ? <div className="alert alert-error mb-4 py-3 text-sm">{localSettingsError}</div> : null}
+
+            {localSettingsStep === 0 ? <div className="space-y-5 rounded-box border border-base-300 bg-base-200/40 p-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Device Profiles</p>
                 <h2 className="mt-2 text-xl font-semibold text-base-content">Local machine settings</h2>
@@ -896,14 +901,6 @@ export function SettingsPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className="btn btn-outline"
-                  disabled={isLoading || isSaving || hasValidationErrors}
-                  onClick={saveCurrentDeviceProfile}
-                >
-                  Save Current Device Profile
-                </button>
-                <button
-                  type="button"
                   className="btn btn-secondary"
                   disabled={isLoading || isSaving || !formState.selectedDeviceName || deviceProfiles.length === 0}
                   onClick={applySelectedDeviceProfile}
@@ -911,12 +908,12 @@ export function SettingsPage() {
                   Apply Selected Profile
                 </button>
                 <p className="text-sm text-base-content/60">
-                  Profiles are stored in SQLite for this clone, so you can keep entries for all machines you use.
+                  Save &amp; Continue stores this device profile. Applying a saved profile replaces the remaining local settings in this editor.
                 </p>
               </div>
-            </div>
+            </div> : null}
 
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className={localSettingsStep === 1 ? "grid gap-5 lg:grid-cols-2" : "hidden"}>
               <label className="form-control gap-2">
                 <span className="label-text font-medium">Whisper Binary Path</span>
                 <div className="join">
@@ -967,6 +964,9 @@ export function SettingsPage() {
                 {formErrors.whisperThreadCount ? <span className="label-text-alt text-error">{formErrors.whisperThreadCount}</span> : null}
               </label>
 
+            </div>
+
+            <div className={localSettingsStep === 2 ? "grid gap-5 lg:grid-cols-2" : "hidden"}>
               <label className="form-control gap-2">
                 <span className="label-text font-medium">TTS Engine</span>
                 <select
@@ -1039,6 +1039,9 @@ export function SettingsPage() {
                 {formErrors.ttsTimeoutSeconds ? <span className="label-text-alt text-error">{formErrors.ttsTimeoutSeconds}</span> : null}
               </label>
 
+            </div>
+
+            <div className={localSettingsStep === 3 ? "grid gap-5 lg:grid-cols-2" : "hidden"}>
               <label className="form-control gap-2">
                 <span className="label-text font-medium">Audio Input Directory</span>
                 <div className="join">
@@ -1090,19 +1093,11 @@ export function SettingsPage() {
               </label>
             </div>
 
-            <div className="flex items-center justify-between gap-4 border-t border-base-300 pt-4">
-              <p className="text-sm text-base-content/60">
-                {isDirty ? "You have unsaved local setting changes." : "Local settings are in sync with the last saved values."}
-              </p>
-              <button
-                type="button"
-                className={`btn btn-primary ${isSaving ? "loading" : ""}`}
-                disabled={isLoading || isSaving || hasValidationErrors || !isDirty}
-                onClick={saveSettings}
-              >
-                Save Settings
-              </button>
+            <div className="modal-action justify-between">
+              <button type="button" className="btn btn-ghost" onClick={() => { setLocalSettingsError(""); setLocalSettingsMessage(""); setLocalSettingsStep((localSettingsStep - 1) as LocalSettingsStep); }} disabled={localSettingsStep === 0 || isSaving}>Back</button>
+              <button type="button" className="btn btn-primary" onClick={saveLocalSettingsStep} disabled={isSaving}>{isSaving ? "Saving…" : localSettingsStep === 3 ? "Save & Finish" : "Save & Continue"}</button>
             </div>
+          </div><button type="button" className="modal-backdrop" onClick={closeLocalSettings}>close</button></dialog> : null}
           </div>
         </div>
 
