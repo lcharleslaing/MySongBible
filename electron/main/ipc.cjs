@@ -505,7 +505,7 @@ function runReinstall(app) {
   });
 }
 
-function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backendController }) {
+function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, nativeImage, shell, backendController }) {
   ipcMain.handle("desktop:get-app-version", () => app.getVersion());
   ipcMain.handle("desktop:get-backend-base-url", () => backendController?.baseUrl || "http://127.0.0.1:8000");
 
@@ -550,6 +550,67 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, shell, backen
   ipcMain.handle("desktop:reinstall-linux-package", () => runReinstall(app));
 
   ipcMain.handle("desktop:package-and-reinstall-linux", () => runPackageAndReinstall(app));
+
+  const iconDirectory = path.join(repoRoot, "electron", "assets", "icons");
+  const iconSourcePath = path.join(iconDirectory, "icon-source.png");
+  const iconSizes = [16, 24, 32, 48, 64, 128, 256, 512];
+
+  const readAppIcon = () => {
+    const iconPath = fs.existsSync(iconSourcePath)
+      ? iconSourcePath
+      : path.join(iconDirectory, "icon.png");
+    const image = nativeImage.createFromPath(iconPath);
+    return {
+      ok: !image.isEmpty(),
+      path: iconPath,
+      dataUrl: image.isEmpty() ? null : image.toDataURL(),
+      message: image.isEmpty() ? "The app icon could not be loaded." : null,
+    };
+  };
+
+  ipcMain.handle("desktop:get-app-icon", readAppIcon);
+
+  ipcMain.handle("desktop:pick-app-icon", async () => {
+    const result = await dialog.showOpenDialog(getActiveWindow(BrowserWindow), {
+      title: "Select App Icon",
+      properties: ["openFile"],
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    });
+    const selectedPath = normalizeSelectedPath(result.filePaths);
+    if (result.canceled || !selectedPath) {
+      return { canceled: true, ...readAppIcon() };
+    }
+
+    const selectedImage = nativeImage.createFromPath(selectedPath);
+    if (selectedImage.isEmpty()) {
+      return { canceled: false, ok: false, path: selectedPath, dataUrl: null, message: "The selected image could not be decoded." };
+    }
+
+    const sourceSize = selectedImage.getSize();
+    if (sourceSize.width < 512 || sourceSize.height < 512) {
+      return { canceled: false, ok: false, path: selectedPath, dataUrl: null, message: "Choose an image at least 512 x 512 pixels." };
+    }
+
+    const squareSize = Math.min(sourceSize.width, sourceSize.height);
+    const squareImage = selectedImage.crop({
+      x: Math.floor((sourceSize.width - squareSize) / 2),
+      y: Math.floor((sourceSize.height - squareSize) / 2),
+      width: squareSize,
+      height: squareSize,
+    });
+
+    fs.mkdirSync(iconDirectory, { recursive: true });
+    fs.writeFileSync(iconSourcePath, squareImage.resize({ width: 1024, height: 1024, quality: "best" }).toPNG());
+    for (const size of iconSizes) {
+      fs.writeFileSync(
+        path.join(iconDirectory, `${size}x${size}.png`),
+        squareImage.resize({ width: size, height: size, quality: "best" }).toPNG(),
+      );
+    }
+    fs.copyFileSync(path.join(iconDirectory, "512x512.png"), path.join(iconDirectory, "icon.png"));
+
+    return { canceled: false, ...readAppIcon(), message: "App icon selected and packaging sizes generated." };
+  });
 
   ipcMain.handle("desktop:local-ai-get-status", () => getLocalAiStatus(app));
 

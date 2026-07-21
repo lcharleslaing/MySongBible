@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("desktop", {
   runLinuxPackage: () => ipcRenderer.invoke("desktop:run-linux-package"),
   reinstallLinuxPackage: () => ipcRenderer.invoke("desktop:reinstall-linux-package"),
   packageAndReinstallLinux: () => ipcRenderer.invoke("desktop:package-and-reinstall-linux"),
+  getAppIcon: () => ipcRenderer.invoke("desktop:get-app-icon"),
+  pickAppIcon: () => ipcRenderer.invoke("desktop:pick-app-icon"),
   localAi: {
     getStatus: () => ipcRenderer.invoke("desktop:local-ai-get-status"),
     runAction: (payload) => ipcRenderer.invoke("desktop:local-ai-run-action", payload),

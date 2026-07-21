@@ -295,6 +295,9 @@ export function SettingsPage() {
   const [packageMessage, setPackageMessage] = useState("");
   const [packageError, setPackageError] = useState("");
   const [statusError, setStatusError] = useState("");
+  const [appIcon, setAppIcon] = useState<AppIconResult | null>(null);
+  const [iconMessage, setIconMessage] = useState("");
+  const [isPickingIcon, setIsPickingIcon] = useState(false);
   const [databasePathNote, setDatabasePathNote] = useState("SQLite database path is startup-only. Change DATABASE_URL and restart the backend to use another database.");
 
   const formErrors = useMemo(() => validateForm(formState), [formState]);
@@ -375,6 +378,12 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    window.desktop?.getAppIcon()
+      .then(setAppIcon)
+      .catch(() => setIconMessage("App icon preview is only available in the desktop app."));
   }, []);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -577,6 +586,23 @@ export function SettingsPage() {
     }
   };
 
+  const pickAppIcon = async () => {
+    try {
+      setIsPickingIcon(true);
+      setIconMessage("");
+      const result = await window.desktop?.pickAppIcon();
+      if (!result || result.canceled) {
+        return;
+      }
+      setAppIcon(result);
+      setIconMessage(result.message || (result.ok ? "App icon updated." : "Could not update the app icon."));
+    } catch (error) {
+      setIconMessage(error instanceof Error ? error.message : "Could not update the app icon.");
+    } finally {
+      setIsPickingIcon(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -679,6 +705,30 @@ export function SettingsPage() {
                 <p className="mt-1 text-sm text-base-content/70">
                   These fields make a cloned project feel like its own app. Saving updates the live UI plus package metadata and starter project files.
                 </p>
+              </div>
+
+              <div className="flex flex-col gap-4 rounded-box border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center">
+                <div className="avatar">
+                  <div className="h-24 w-24 rounded-2xl bg-base-300 shadow-sm">
+                    {appIcon?.dataUrl ? <img src={appIcon.dataUrl} alt="Current application icon" /> : null}
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold">App Icon</h3>
+                  <p className="mt-1 text-sm text-base-content/70">
+                    Choose a PNG, JPEG, or WebP image at least 512 x 512 pixels. It will be center-cropped and converted into every icon size used by the desktop window, Linux build, package, and installed application.
+                  </p>
+                  {appIcon?.path ? <p className="mt-2 truncate font-mono text-xs text-base-content/50">{appIcon.path}</p> : null}
+                  {iconMessage ? <p className={`mt-2 text-sm ${appIcon?.ok === false ? "text-error" : "text-info"}`}>{iconMessage}</p> : null}
+                </div>
+                <button
+                  type="button"
+                  className={`btn btn-outline btn-sm ${isPickingIcon ? "loading" : ""}`}
+                  onClick={pickAppIcon}
+                  disabled={isPickingIcon || !window.desktop}
+                >
+                  Choose Icon
+                </button>
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">

@@ -4,6 +4,7 @@ const zlib = require("node:zlib");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const iconDir = path.join(repoRoot, "electron", "assets", "icons");
+const sourceIconPath = path.join(iconDir, "icon-source.png");
 const sizes = [16, 24, 32, 48, 64, 128, 256, 512];
 
 function crc32(buffer) {
@@ -70,10 +71,22 @@ function createIcon(size) {
 
 fs.mkdirSync(iconDir, { recursive: true });
 
-for (const size of sizes) {
-  fs.writeFileSync(path.join(iconDir, `${size}x${size}.png`), createIcon(size));
+if (!fs.existsSync(sourceIconPath)) {
+  for (const size of sizes) {
+    fs.writeFileSync(path.join(iconDir, `${size}x${size}.png`), createIcon(size));
+  }
+  fs.copyFileSync(path.join(iconDir, "512x512.png"), path.join(iconDir, "icon.png"));
+  console.log(`Generated fallback Linux icons in ${path.relative(repoRoot, iconDir)}.`);
+  process.exit(0);
+}
+
+const missingIcons = sizes
+  .map((size) => path.join(iconDir, `${size}x${size}.png`))
+  .filter((iconPath) => !fs.existsSync(iconPath));
+
+if (missingIcons.length > 0) {
+  throw new Error("Generated app icon sizes are missing. Select the app icon again in Settings > App Definition.");
 }
 
 fs.copyFileSync(path.join(iconDir, "512x512.png"), path.join(iconDir, "icon.png"));
-console.log(`Generated Linux icons in ${path.relative(repoRoot, iconDir)}.`);
-
+console.log(`Prepared selected app icon sizes in ${path.relative(repoRoot, iconDir)} for build and packaging.`);

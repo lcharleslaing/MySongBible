@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeImage, screen, shell } = require("electron");
 
 const { registerDesktopIpc } = require("./ipc.cjs");
 const { startBackendProcess, stopBackendProcess } = require("./backend.cjs");
@@ -90,6 +90,7 @@ function createMainWindow() {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#f3f6ef",
+    icon: path.join(__dirname, "..", "assets", "icons", "icon.png"),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -178,6 +179,7 @@ async function bootstrap() {
     BrowserWindow,
     dialog,
     ipcMain,
+    nativeImage,
     shell,
     backendController,
   });

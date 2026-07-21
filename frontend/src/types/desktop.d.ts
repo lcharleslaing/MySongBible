@@ -25,6 +25,8 @@ declare global {
       runLinuxPackage: () => Promise<PackageActionResult>;
       reinstallLinuxPackage: () => Promise<PackageActionResult>;
       packageAndReinstallLinux: () => Promise<PackageActionResult>;
+      getAppIcon: () => Promise<AppIconResult>;
+      pickAppIcon: () => Promise<AppIconResult & { canceled: boolean }>;
       localAi: {
         getStatus: () => Promise<LocalAiStatusResult>;
         runAction: (payload: LocalAiRunActionPayload) => Promise<LocalAiActionResult>;
@@ -93,6 +95,13 @@ declare global {
   type PackageActionResult = PackageStatusResult & {
     ok: boolean;
     message: string;
+  };
+
+  type AppIconResult = {
+    ok: boolean;
+    path: string;
+    dataUrl: string | null;
+    message: string | null;
   };
 
   type LocalAiActionId =
