@@ -553,7 +553,7 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, nativeImage, 
 
   const iconDirectory = path.join(repoRoot, "electron", "assets", "icons");
   const iconSourcePath = path.join(iconDirectory, "icon-source.png");
-  const iconSizes = [16, 24, 32, 48, 64, 128, 256, 512];
+  const iconSizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 
   const readAppIcon = () => {
     const iconPath = fs.existsSync(iconSourcePath)

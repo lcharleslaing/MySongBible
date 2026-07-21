@@ -5,7 +5,7 @@ const zlib = require("node:zlib");
 const repoRoot = path.resolve(__dirname, "..", "..");
 const iconDir = path.join(repoRoot, "electron", "assets", "icons");
 const sourceIconPath = path.join(iconDir, "icon-source.png");
-const sizes = [16, 24, 32, 48, 64, 128, 256, 512];
+const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 
 function crc32(buffer) {
   let crc = 0xffffffff;
@@ -79,6 +79,11 @@ if (!fs.existsSync(sourceIconPath)) {
   console.log(`Generated fallback Linux icons in ${path.relative(repoRoot, iconDir)}.`);
   process.exit(0);
 }
+
+// The Settings picker normalizes the master source to 1024px. Keep an explicit
+// packaging-size copy so source-aware cleanup can remove generated files and
+// the build can always restore the required largest icon without decoding it.
+fs.copyFileSync(sourceIconPath, path.join(iconDir, "1024x1024.png"));
 
 const missingIcons = sizes
   .map((size) => path.join(iconDir, `${size}x${size}.png`))
