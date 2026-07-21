@@ -4,10 +4,11 @@ from typing import Annotated
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from app.core.runtime_paths import default_runtime_root
 
 
 class Settings(BaseSettings):
-    app_name: str = "AppTemplateBase Backend"
+    app_name: str = "VideoShareApp"
     app_env: str = "development"
     log_level: str = "INFO"
     log_dir: Path | None = None
@@ -26,8 +27,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("CORS_ORIGINS", "BACKEND_CORS_ORIGINS"),
     )
 
-    app_data_dir: Path = Path("./data")
-    database_url: str = "sqlite:///./data/app_template_base.sqlite3"
+    app_data_dir: Path = Field(default_factory=default_runtime_root)
+    database_url: str = ""
     database_echo: bool = False
 
     whisper_cpp_binary: Path | None = Field(
@@ -69,8 +70,14 @@ class Settings(BaseSettings):
     )
     piper_binary: Path | None = None
     piper_model_path: Path | None = None
+    piper_json_config_path: Path | None = None
     tts_output_dir: Path | None = None
     tts_timeout_seconds: int = Field(default=120, validation_alias=AliasChoices("TTS_TIMEOUT_SECONDS", "PIPER_TIMEOUT_SECONDS"))
+    local_chat_provider: str = "openai-compatible"
+    local_chat_endpoint: str = "http://127.0.0.1:11434/v1"
+    local_chat_model: str | None = None
+    local_chat_timeout_seconds: int = 30
+    local_chat_persist: bool = True
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
@@ -87,6 +94,7 @@ class Settings(BaseSettings):
         "audio_input_dir_override",
         "piper_binary",
         "piper_model_path",
+        "piper_json_config_path",
         "default_stt_model",
         mode="before",
     )
@@ -104,6 +112,7 @@ class Settings(BaseSettings):
         "audio_input_dir_override",
         "piper_binary",
         "piper_model_path",
+        "piper_json_config_path",
         "tts_output_dir",
         mode="before",
     )
@@ -157,6 +166,13 @@ class Settings(BaseSettings):
     @property
     def voice_dataset_exports_dir(self) -> Path:
         return self.app_data_dir / "exports" / "voice-datasets"
+
+    def model_post_init(self, __context: object) -> None:
+        self.app_data_dir = self.app_data_dir.expanduser().resolve()
+        if not self.database_url:
+            self.database_url = f"sqlite:///{self.app_data_dir / 'database' / 'videoshareapp.sqlite3'}"
+        if self.log_dir is None:
+            self.log_dir = self.app_data_dir / "logs"
 
 
 @lru_cache(maxsize=1)

@@ -1,5 +1,5 @@
 {
-  "name": "apptemplatebase",
+  "name": "video-share-app",
   "private": true,
   "version": "0.1.0",
   "description": "Reusable local-first Electron, React, and FastAPI desktop starter.",
