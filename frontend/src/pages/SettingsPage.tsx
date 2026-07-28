@@ -344,11 +344,11 @@ export function SettingsPage() {
       : backendHealth?.status === "ok"
         ? "Ready"
         : "Not Ready";
-  const localAiChatReadiness: ReadinessState = statusError
+  const localAiReadiness: ReadinessState = statusError
     ? "Error"
-    : isLoading || !backendHealth
+    : isLoading || !backendHealth || !voiceStatus
       ? "Checking"
-      : backendHealth.local_ai_chat.configured
+      : voiceStatus.stt_ready && Boolean(piperStatus?.available) && backendHealth.status === "ok"
         ? "Ready"
         : "Not Ready";
   const whisperReadiness: ReadinessState = statusError
@@ -709,12 +709,12 @@ export function SettingsPage() {
             <div className="card-body">
               <h3 className="card-title">Local AI</h3>
               <p className="text-sm text-base-content/70">
-                Configure local model paths, providers, runtime services, and test actions in the full setup interface.
+                Configure local speech models and runtime services, then run STT, TTS, and backend checks in the full setup interface.
               </p>
               <dl className="mt-1 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 text-sm">
                 <dt>Whisper STT</dt><dd>{readinessBadge(whisperReadiness)}</dd>
                 <dt>Piper TTS</dt><dd>{readinessBadge(piperReadiness)}</dd>
-                <dt>Local AI Chat</dt><dd>{readinessBadge(localAiChatReadiness)}</dd>
+                <dt>Local AI checks</dt><dd>{readinessBadge(localAiReadiness)}</dd>
                 <dt>Backend service</dt><dd>{readinessBadge(backendReadiness)}</dd>
               </dl>
               <div className="card-actions mt-auto justify-end">
