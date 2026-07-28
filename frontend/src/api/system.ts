@@ -2,6 +2,12 @@ import { buildApiUrl, parseJsonResponse } from "./client";
 
 export type BackendHealthRecord = {
   status: string;
+  local_ai_chat: {
+    configured: boolean;
+    provider: string;
+    model: string | null;
+    endpoint: string;
+  };
 };
 
 export type VoiceStatusRecord = {

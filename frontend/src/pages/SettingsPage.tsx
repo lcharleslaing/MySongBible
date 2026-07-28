@@ -12,7 +12,7 @@ import {
   updateAppDefinition,
   updateSettings,
 } from "../api/settings";
-import { getBackendHealth, getVoiceStatus, type VoiceStatusRecord } from "../api/system";
+import { getBackendHealth, getVoiceStatus, type BackendHealthRecord, type VoiceStatusRecord } from "../api/system";
 import { PageHeader } from "../components/ui/PageHeader";
 import { useAppDefinition } from "../context/AppDefinitionContext";
 import { AppLockSettings } from "../components/app-lock/AppLockSettings";
@@ -309,7 +309,7 @@ export function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [backendHealth, setBackendHealth] = useState<string>("loading");
+  const [backendHealth, setBackendHealth] = useState<BackendHealthRecord | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatusRecord | null>(null);
   const [deviceProfiles, setDeviceProfiles] = useState<DeviceSettingsProfileRecord[]>([]);
   const [packageStatus, setPackageStatus] = useState<PackageStatus | null>(null);
@@ -341,7 +341,14 @@ export function SettingsPage() {
     ? "Error"
     : isLoading
       ? "Checking"
-      : backendHealth === "ok"
+      : backendHealth?.status === "ok"
+        ? "Ready"
+        : "Not Ready";
+  const localAiChatReadiness: ReadinessState = statusError
+    ? "Error"
+    : isLoading || !backendHealth
+      ? "Checking"
+      : backendHealth.local_ai_chat.configured
         ? "Ready"
         : "Not Ready";
   const whisperReadiness: ReadinessState = statusError
@@ -379,7 +386,7 @@ export function SettingsPage() {
         setSavedState(nextFormState);
         setDatabasePathNote(settings.database_path_note);
         setDeviceProfiles(settings.device_profiles);
-        setBackendHealth(health.status);
+        setBackendHealth(health);
         setVoiceStatus(voice);
         const packageInfo = await window.desktop?.getPackageStatus();
         if (packageInfo) {
@@ -707,7 +714,7 @@ export function SettingsPage() {
               <dl className="mt-1 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 text-sm">
                 <dt>Whisper STT</dt><dd>{readinessBadge(whisperReadiness)}</dd>
                 <dt>Piper TTS</dt><dd>{readinessBadge(piperReadiness)}</dd>
-                <dt>Local AI Chat</dt><dd>{readinessBadge("Not Ready")}</dd>
+                <dt>Local AI Chat</dt><dd>{readinessBadge(localAiChatReadiness)}</dd>
                 <dt>Backend service</dt><dd>{readinessBadge(backendReadiness)}</dd>
               </dl>
               <div className="card-actions mt-auto justify-end">
@@ -1254,8 +1261,8 @@ export function SettingsPage() {
             <div className="rounded-box bg-base-200 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Health</p>
               <div className="mt-3 flex items-center gap-3">
-                <span className={`badge ${backendHealth === "ok" ? "badge-success" : "badge-warning"}`}>
-                  {backendHealth}
+                <span className={`badge ${backendHealth?.status === "ok" ? "badge-success" : "badge-warning"}`}>
+                  {backendHealth?.status || "loading"}
                 </span>
                 <span className="text-sm text-base-content/70">`GET /api/health`</span>
               </div>
