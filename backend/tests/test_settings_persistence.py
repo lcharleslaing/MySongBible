@@ -180,6 +180,28 @@ def test_app_definition_updates_project_files(tmp_path, monkeypatch) -> None:
     (frontend_dir / "index.html").write_text("<html><head><title>AppTemplateBase</title></head></html>", encoding="utf-8")
     (project_root / ".env.example").write_text("APP_NAME=AppTemplateBase\n", encoding="utf-8")
     (backend_dir / ".env.example").write_text("APP_NAME=AppTemplateBase Backend\n", encoding="utf-8")
+    (backend_dir / "pyproject.toml").write_text(
+        '[project]\nname = "apptemplatebase-backend"\nversion = "0.1.0"\n'
+        'description = "Local FastAPI backend for AppTemplateBase"\n',
+        encoding="utf-8",
+    )
+    backend_core_dir = backend_dir / "app" / "core"
+    backend_routes_dir = backend_dir / "app" / "api" / "routes"
+    backend_core_dir.mkdir(parents=True)
+    backend_routes_dir.mkdir(parents=True)
+    (backend_core_dir / "runtime_paths.py").write_text('APP_DIRECTORY_NAME = "AppTemplateBase"\n', encoding="utf-8")
+    (backend_core_dir / "config.py").write_text(
+        '    app_name: str = "AppTemplateBase"\n'
+        '            self.database_url = f"sqlite:///{self.app_data_dir / \'database\' / \'apptemplatebase.sqlite3\'}"\n',
+        encoding="utf-8",
+    )
+    (backend_routes_dir / "health.py").write_text(
+        'app_name="AppTemplateBase",\nbackend_version="0.1.0",\n'
+        'identity="com.localfirst.apptemplatebase.backend",\n'
+        'return {"app_name": "AppTemplateBase", "identity": "com.localfirst.apptemplatebase.backend", '
+        '"backend_version": "0.1.0"}\n',
+        encoding="utf-8",
+    )
     (project_root / "README.md").write_text("# AppTemplateBase\n\nStarter.\n", encoding="utf-8")
 
     monkeypatch.setattr("app.services.settings.PROJECT_ROOT", project_root)
@@ -209,8 +231,15 @@ def test_app_definition_updates_project_files(tmp_path, monkeypatch) -> None:
     assert json.loads((frontend_dir / "package.json").read_text(encoding="utf-8"))["name"] == "my-new-app-frontend"
     assert json.loads((project_root / "package-lock.json").read_text(encoding="utf-8"))["packages"]["frontend"]["name"] == "my-new-app-frontend"
     assert "<title>My New App</title>" in (frontend_dir / "index.html").read_text(encoding="utf-8")
-    assert "APP_NAME=My New App\n" == (project_root / ".env.example").read_text(encoding="utf-8")
-    assert "APP_NAME=My New App Backend\n" == (backend_dir / ".env.example").read_text(encoding="utf-8")
+    assert (project_root / ".env.example").read_text(encoding="utf-8").startswith("APP_NAME=My New App\n")
+    assert (backend_dir / ".env.example").read_text(encoding="utf-8").startswith("APP_NAME=My New App Backend\n")
+    assert "DATABASE_URL=sqlite:///./data/my_new_app.sqlite3" in (project_root / ".env.example").read_text(encoding="utf-8")
+    assert 'name = "my-new-app-backend"' in (backend_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'version = "1.2.3"' in (backend_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'APP_DIRECTORY_NAME = "My New App"' in (backend_core_dir / "runtime_paths.py").read_text(encoding="utf-8")
+    assert 'app_name: str = "My New App"' in (backend_core_dir / "config.py").read_text(encoding="utf-8")
+    assert "my_new_app.sqlite3" in (backend_core_dir / "config.py").read_text(encoding="utf-8")
+    assert 'identity="com.localfirst.my.new.app.backend"' in (backend_routes_dir / "health.py").read_text(encoding="utf-8")
     assert (project_root / "README.md").read_text(encoding="utf-8").startswith("# My New App")
 
 

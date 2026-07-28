@@ -21,6 +21,7 @@
     "start:bootstrap-only": "node scripts/dev/bootstrap-start.cjs --bootstrap-only",
     "template:init": "node scripts/template/init-template.cjs --force",
     "template:init:check": "node scripts/template/init-template.cjs --dry-run",
+    "template:repository": "node scripts/template/init-template.cjs --repository-only",
     "setup:local-ai": "python3 -m tools.local_ai_setup setup:local-ai",
     "setup:whisper": "python3 -m tools.local_ai_setup setup:whisper",
     "setup:piper": "python3 -m tools.local_ai_setup setup:piper",

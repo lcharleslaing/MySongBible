@@ -4,16 +4,22 @@ Use this repository as a starting point for a new local-first desktop app. The g
 
 ## 1. Create a New App From the Template
 
-Example:
+Clone AppTemplateBase into a folder named for the new application:
 
 ```bash
-cp -R AppTemplateBase MyNewApp
+git clone https://github.com/lcharleslaing/AppTemplateBase.git MyNewApp
 cd MyNewApp
-rm -rf .git
-git init
+npm start
 ```
 
-If you are using a remote template flow instead, the important part is the same: start with a fresh Git history for the new app and then rename the template-facing metadata below.
+On first start, the cloned app derives an initial local identity from `MyNewApp`. Open Settings inside the cloned app, edit App Identity, and select **Save & Finish**. That explicit save runs the adoption workflow: it creates a private GitHub repository for the signed-in GitHub CLI user and configures:
+
+```text
+origin   -> MyNewApp
+upstream -> AppTemplateBase
+```
+
+This keeps the app's commits and releases in its own repository while retaining AppTemplateBase as an upstream source for future merges. Set `APP_REPOSITORY_VISIBILITY=public` or `internal` before saving App Identity to choose a different visibility. `APP_REPOSITORY_OWNER` and `APP_REPOSITORY_NAME` can override the detected GitHub user and folder name.
 
 ## 2. Rename the App
 
@@ -23,21 +29,23 @@ You can also make the cloned app identity explicit from the desktop UI. Open Set
 
 The automatic setup updates:
 
-- root `package.json` `name`
-- `frontend/package.json` `name`
+- root/frontend package names and package-lock metadata
+- Electron desktop name, product name, and application ID
 - `frontend/index.html` title
-- visible frontend sidebar template title
-- `README.md` title when it is still exactly `# AppTemplateBase`
+- frontend-visible identity stored by App Identity
+- root/backend environment example names and SQLite filenames
+- backend package name, version, runtime directory name, and health identity
+- `README.md` title
+- package repository metadata
+- Git remotes, identity commit, and initial push
 
-The automatic setup does not change Git remotes, rename folders, rewrite historical docs, rename Python packages/modules, or change architecture decisions.
-
-To force it to run again:
+GitHub CLI (`gh`) must be installed and authenticated. If it is unavailable, the App Identity save still succeeds locally and repository adoption retries the next time you save App Identity. To retry explicitly:
 
 ```bash
-npm run template:init
-# or
-TEMPLATE_INIT_FORCE=1 npm start
+npm run template:repository
 ```
+
+Saving App Identity later reruns repository synchronization automatically, commits the generated identity files, and pushes them to the app's `origin`.
 
 If you want to rename more fields manually, update these template-facing values.
 

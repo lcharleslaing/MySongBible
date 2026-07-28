@@ -794,7 +794,7 @@ export function SettingsPage() {
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">App Identity</p>
                       <h2 id="app-identity-title" className="mt-1 text-2xl font-semibold">Edit app identity</h2>
-                      <p className="mt-1 text-sm text-base-content/60">Review each step, then save all identity changes when you finish.</p>
+                      <p className="mt-1 text-sm text-base-content/60">Review each step, then save all identity changes when you finish. Adopted clones also commit and push generated identity files to their app repository.</p>
                     </div>
                     <button type="button" className="btn btn-circle btn-ghost btn-sm" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)} disabled={isSaving}>✕</button>
                   </div>

@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
+import re
 import socket
+import subprocess
 
 from sqlmodel import Session, select
 
@@ -32,6 +35,7 @@ def utc_now() -> datetime:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+logger = logging.getLogger(__name__)
 
 APP_DEFINITION_DEFAULTS = {
     "package_name": "apptemplatebase",
@@ -172,6 +176,7 @@ class SettingsService:
 
         self._apply_app_definition_to_project_files(AppDefinition(**values))
         self.session.commit()
+        self._sync_app_repository()
         return self.get_public_settings()
 
     def update_home_page(self, payload: HomePageSettingsUpdateRequest) -> PublicSettingsResponse:
@@ -327,6 +332,8 @@ class SettingsService:
         package_name = definition.package_name
         frontend_package_name = f"{package_name}-frontend"
         version = definition.app_version
+        database_name = re.sub(r"[^a-z0-9]+", "_", package_name.lower()).strip("_")
+        backend_identity = f"com.localfirst.{package_name.replace('-', '.').replace('_', '.')}.backend"
 
         self._update_root_package_json(
             PROJECT_ROOT / "package.json",
@@ -339,8 +346,48 @@ class SettingsService:
         self._update_package_lock(PROJECT_ROOT / "frontend" / "package-lock.json", frontend_package_name, version)
         self._replace_html_title(PROJECT_ROOT / "frontend" / "index.html", definition.app_display_name)
         self._update_env_key(PROJECT_ROOT / ".env.example", "APP_NAME", definition.app_display_name)
+        self._update_env_key(PROJECT_ROOT / ".env.example", "DATABASE_URL", f"sqlite:///./data/{database_name}.sqlite3")
         self._update_env_key(PROJECT_ROOT / "backend" / ".env.example", "APP_NAME", f"{definition.app_display_name} Backend")
+        self._update_env_key(PROJECT_ROOT / "backend" / ".env.example", "DATABASE_URL", f"sqlite:///./data/{database_name}.sqlite3")
+        self._update_backend_pyproject(
+            PROJECT_ROOT / "backend" / "pyproject.toml",
+            package_name=f"{package_name}-backend",
+            version=version,
+            display_name=definition.app_display_name,
+        )
+        self._replace_python_assignment(
+            PROJECT_ROOT / "backend" / "app" / "core" / "runtime_paths.py",
+            "APP_DIRECTORY_NAME",
+            definition.app_display_name,
+        )
+        self._update_backend_config(
+            PROJECT_ROOT / "backend" / "app" / "core" / "config.py",
+            display_name=definition.app_display_name,
+            database_name=database_name,
+        )
+        self._update_backend_health_identity(
+            PROJECT_ROOT / "backend" / "app" / "api" / "routes" / "health.py",
+            display_name=definition.app_display_name,
+            version=version,
+            identity=backend_identity,
+        )
         self._replace_readme_title(PROJECT_ROOT / "README.md", definition.app_display_name)
+
+    def _sync_app_repository(self) -> None:
+        script_path = PROJECT_ROOT / "scripts" / "template" / "init-template.cjs"
+        if not script_path.exists():
+            return
+        completed = subprocess.run(
+            ["node", str(script_path), "--repository-only"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            logger.warning("App repository synchronization failed: %s", completed.stderr.strip())
+        elif completed.stdout.strip():
+            logger.info("%s", completed.stdout.strip())
 
     @staticmethod
     def _read_json_file(path_value: Path) -> dict[str, object]:
@@ -434,6 +481,79 @@ class SettingsService:
         if lines[0].startswith("# "):
             lines[0] = f"# {title}"
             path_value.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    @staticmethod
+    def _update_backend_pyproject(path_value: Path, *, package_name: str, version: str, display_name: str) -> None:
+        if not path_value.exists():
+            raise AppDefinitionApplyError(f"Expected project file was not found: {path_value}")
+        content = path_value.read_text(encoding="utf-8")
+        replacements = {
+            r'(?m)^name = ".*"$': f'name = "{package_name}"',
+            r'(?m)^version = ".*"$': f'version = "{version}"',
+            r'(?m)^description = ".*"$': f'description = "Local FastAPI backend for {display_name}"',
+        }
+        next_content = content
+        for pattern, replacement in replacements.items():
+            next_content, count = re.subn(pattern, replacement, next_content, count=1)
+            if count != 1:
+                raise AppDefinitionApplyError(f"Could not update backend metadata in {path_value}")
+        if next_content != content:
+            path_value.write_text(next_content, encoding="utf-8")
+
+    @staticmethod
+    def _replace_python_assignment(path_value: Path, variable: str, value: str) -> None:
+        if not path_value.exists():
+            raise AppDefinitionApplyError(f"Expected project file was not found: {path_value}")
+        content = path_value.read_text(encoding="utf-8")
+        next_content, count = re.subn(
+            rf'(?m)^{re.escape(variable)} = ".*"$',
+            f'{variable} = "{value}"',
+            content,
+            count=1,
+        )
+        if count != 1:
+            raise AppDefinitionApplyError(f"Could not update {variable} in {path_value}")
+        if next_content != content:
+            path_value.write_text(next_content, encoding="utf-8")
+
+    @staticmethod
+    def _update_backend_health_identity(path_value: Path, *, display_name: str, version: str, identity: str) -> None:
+        if not path_value.exists():
+            raise AppDefinitionApplyError(f"Expected project file was not found: {path_value}")
+        content = path_value.read_text(encoding="utf-8")
+        next_content = content
+        next_content = re.sub(r'(?m)^(\s*)app_name=".*",$', rf'\1app_name="{display_name}",', next_content)
+        next_content = re.sub(r'(?m)^(\s*)backend_version=".*",$', rf'\1backend_version="{version}",', next_content)
+        next_content = re.sub(r'(?m)^(\s*)identity=".*",$', rf'\1identity="{identity}",', next_content)
+        next_content = re.sub(
+            r'(?m)^(\s*)return \{"app_name": ".*", "identity": ".*", "backend_version": ".*"\}$',
+            rf'\1return {{"app_name": "{display_name}", "identity": "{identity}", "backend_version": "{version}"}}',
+            next_content,
+        )
+        if next_content != content:
+            path_value.write_text(next_content, encoding="utf-8")
+
+    @staticmethod
+    def _update_backend_config(path_value: Path, *, display_name: str, database_name: str) -> None:
+        if not path_value.exists():
+            raise AppDefinitionApplyError(f"Expected project file was not found: {path_value}")
+        content = path_value.read_text(encoding="utf-8")
+        next_content, app_name_count = re.subn(
+            r'(?m)^(\s*)app_name: str = ".*"$',
+            rf'\1app_name: str = "{display_name}"',
+            content,
+            count=1,
+        )
+        next_content, database_count = re.subn(
+            r'(?m)^(\s*)self\.database_url = f"sqlite:///.*"$',
+            rf'\1self.database_url = f"sqlite:///{{self.app_data_dir / \'database\' / \'{database_name}.sqlite3\'}}"',
+            next_content,
+            count=1,
+        )
+        if app_name_count != 1 or database_count != 1:
+            raise AppDefinitionApplyError(f"Could not update backend defaults in {path_value}")
+        if next_content != content:
+            path_value.write_text(next_content, encoding="utf-8")
 
     @staticmethod
     def _sqlite_url_from_path(path_value: str) -> str:
