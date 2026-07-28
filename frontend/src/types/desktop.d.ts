@@ -25,6 +25,8 @@ declare global {
       runLinuxPackage: () => Promise<PackageActionResult>;
       reinstallLinuxPackage: () => Promise<PackageActionResult>;
       packageAndReinstallLinux: () => Promise<PackageActionResult>;
+      getTemplateUpdateStatus: (options?: { fetch?: boolean }) => Promise<TemplateUpdateStatusResult>;
+      mergeTemplateUpdates: () => Promise<TemplateUpdateStatusResult>;
       getAppIcon: () => Promise<AppIconResult>;
       pickAppIcon: () => Promise<AppIconResult & { canceled: boolean }>;
       localAi: {
@@ -102,6 +104,19 @@ declare global {
     path: string;
     dataUrl: string | null;
     message: string | null;
+  };
+
+  type TemplateUpdateStatusResult = {
+    ok: boolean;
+    configured: boolean;
+    upstreamUrl: string | null;
+    branch: string | null;
+    incomingCount: number;
+    commits: string[];
+    worktreeClean: boolean;
+    canMerge: boolean;
+    merged?: boolean;
+    message: string;
   };
 
   type LocalAiActionId =

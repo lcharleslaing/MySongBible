@@ -315,6 +315,9 @@ export function SettingsPage() {
   const [packageStatus, setPackageStatus] = useState<PackageStatus | null>(null);
   const [packageMessage, setPackageMessage] = useState("");
   const [packageError, setPackageError] = useState("");
+  const [templateUpdateStatus, setTemplateUpdateStatus] = useState<TemplateUpdateStatusResult | null>(null);
+  const [isTemplateUpdateRunning, setIsTemplateUpdateRunning] = useState(false);
+  const [templateUpdateError, setTemplateUpdateError] = useState("");
   const [statusError, setStatusError] = useState("");
   const [appIcon, setAppIcon] = useState<AppIconResult | null>(null);
   const [iconMessage, setIconMessage] = useState("");
@@ -391,6 +394,10 @@ export function SettingsPage() {
         const packageInfo = await window.desktop?.getPackageStatus();
         if (packageInfo) {
           setPackageStatus(packageInfo);
+        }
+        const templateInfo = await window.desktop?.getTemplateUpdateStatus();
+        if (templateInfo) {
+          setTemplateUpdateStatus(templateInfo);
         }
         setStatusMessage("Loaded local settings. Environment values remain the defaults until you override them here.");
       } catch (error) {
@@ -582,6 +589,46 @@ export function SettingsPage() {
       setPackageError("");
     } catch {
       setPackageError("Could not copy automatically. Select the command text and copy it manually.");
+    }
+  };
+
+  const checkTemplateUpdates = async () => {
+    try {
+      setIsTemplateUpdateRunning(true);
+      setTemplateUpdateError("");
+      const result = await window.desktop?.getTemplateUpdateStatus({ fetch: true });
+      if (!result) {
+        setTemplateUpdateError("Template update actions are available only in the desktop app.");
+        return;
+      }
+      setTemplateUpdateStatus(result);
+      if (!result.ok) {
+        setTemplateUpdateError(result.message);
+      }
+    } catch (error) {
+      setTemplateUpdateError(error instanceof Error ? error.message : "Could not check template updates.");
+    } finally {
+      setIsTemplateUpdateRunning(false);
+    }
+  };
+
+  const mergeTemplateUpdates = async () => {
+    try {
+      setIsTemplateUpdateRunning(true);
+      setTemplateUpdateError("");
+      const result = await window.desktop?.mergeTemplateUpdates();
+      if (!result) {
+        setTemplateUpdateError("Template update actions are available only in the desktop app.");
+        return;
+      }
+      setTemplateUpdateStatus(result);
+      if (!result.ok) {
+        setTemplateUpdateError(result.message);
+      }
+    } catch (error) {
+      setTemplateUpdateError(error instanceof Error ? error.message : "Could not merge template updates.");
+    } finally {
+      setIsTemplateUpdateRunning(false);
     }
   };
 
@@ -1246,6 +1293,79 @@ export function SettingsPage() {
                   <p className="break-all"><span className="font-medium">Release:</span> {packageStatus.releaseDir}</p>
                   <p className="break-all"><span className="font-medium">Log:</span> {packageStatus.logsPath}</p>
                 </div>
+              ) : null}
+            </div>
+
+            <div className="divider my-1" />
+
+            <h2 className="card-title text-xl">Template Updates</h2>
+            <div className="rounded-box bg-base-200 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">AppTemplateBase</p>
+                  <p className="mt-2 text-sm text-base-content/70">
+                    {templateUpdateStatus?.message || "Template update status has not been checked yet."}
+                  </p>
+                </div>
+                <span className={`badge ${
+                  templateUpdateStatus?.incomingCount
+                    ? "badge-warning"
+                    : templateUpdateStatus?.configured && templateUpdateStatus.ok
+                      ? "badge-success"
+                      : "badge-ghost"
+                }`}>
+                  {templateUpdateStatus?.incomingCount
+                    ? `${templateUpdateStatus.incomingCount} available`
+                    : templateUpdateStatus?.configured && templateUpdateStatus.ok
+                      ? "Current"
+                      : templateUpdateStatus
+                        ? "Not configured"
+                        : "Not checked"}
+                </span>
+              </div>
+
+              {templateUpdateStatus?.commits.length ? (
+                <ul className="mt-3 space-y-1 rounded border border-base-300 bg-base-100 p-3 text-xs">
+                  {templateUpdateStatus.commits.map((commit) => <li key={commit} className="font-mono">{commit}</li>)}
+                </ul>
+              ) : null}
+
+              {templateUpdateStatus?.incomingCount && !templateUpdateStatus.worktreeClean ? (
+                <div className="alert alert-warning mt-3 py-2">
+                  <span className="text-xs">Commit or stash local changes before merging.</span>
+                </div>
+              ) : null}
+
+              {templateUpdateError ? (
+                <div className="alert alert-error mt-3 py-2">
+                  <span className="text-xs">{templateUpdateError}</span>
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={checkTemplateUpdates}
+                  disabled={isTemplateUpdateRunning}
+                >
+                  {isTemplateUpdateRunning ? <span className="loading loading-spinner loading-xs" /> : null}
+                  Check for Updates
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={mergeTemplateUpdates}
+                  disabled={isTemplateUpdateRunning || !templateUpdateStatus?.canMerge}
+                >
+                  Merge Updates
+                </button>
+              </div>
+
+              {templateUpdateStatus?.upstreamUrl ? (
+                <p className="mt-3 break-all text-xs text-base-content/50">
+                  Upstream: {templateUpdateStatus.upstreamUrl}
+                </p>
               ) : null}
             </div>
 

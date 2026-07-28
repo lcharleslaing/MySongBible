@@ -106,6 +106,133 @@ function getNpmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
+function runGit(args, { timeoutMs = 15_000 } = {}) {
+  return spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf-8",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: timeoutMs,
+  });
+}
+
+function gitText(args) {
+  const completed = runGit(args);
+  return completed.status === 0 ? (completed.stdout || "").trim() : "";
+}
+
+function findUpstreamBranch() {
+  const symbolic = gitText(["symbolic-ref", "--quiet", "--short", "refs/remotes/upstream/HEAD"]);
+  if (symbolic) {
+    return symbolic;
+  }
+  const branches = gitText(["for-each-ref", "--format=%(refname:short)", "refs/remotes/upstream"])
+    .split(/\r?\n/)
+    .filter(Boolean);
+  return branches.find((branch) => branch === "upstream/main")
+    || branches.find((branch) => branch === "upstream/master")
+    || branches[0]
+    || null;
+}
+
+function getTemplateUpdateStatus({ fetch = false } = {}) {
+  const upstreamUrl = gitText(["remote", "get-url", "upstream"]);
+  if (!upstreamUrl) {
+    return {
+      ok: true,
+      configured: false,
+      upstreamUrl: null,
+      branch: null,
+      incomingCount: 0,
+      commits: [],
+      worktreeClean: false,
+      canMerge: false,
+      message: "No AppTemplateBase upstream remote is configured yet.",
+    };
+  }
+
+  if (fetch) {
+    const fetched = runGit(["fetch", "--quiet", "upstream"]);
+    if (fetched.status !== 0) {
+      return {
+        ok: false,
+        configured: true,
+        upstreamUrl,
+        branch: findUpstreamBranch(),
+        incomingCount: 0,
+        commits: [],
+        worktreeClean: false,
+        canMerge: false,
+        message: (fetched.stderr || fetched.error?.message || "Could not fetch AppTemplateBase.").trim(),
+      };
+    }
+  }
+
+  const branch = findUpstreamBranch();
+  if (!branch) {
+    return {
+      ok: false,
+      configured: true,
+      upstreamUrl,
+      branch: null,
+      incomingCount: 0,
+      commits: [],
+      worktreeClean: false,
+      canMerge: false,
+      message: "No upstream default branch was found.",
+    };
+  }
+  const incomingCount = Number(gitText(["rev-list", "--count", `HEAD..${branch}`]) || "0");
+  const commits = gitText(["log", "--format=%h %s", "--max-count=8", `HEAD..${branch}`])
+    .split(/\r?\n/)
+    .filter(Boolean);
+  const worktreeClean = gitText(["status", "--porcelain"]) === "";
+  return {
+    ok: true,
+    configured: true,
+    upstreamUrl,
+    branch,
+    incomingCount,
+    commits,
+    worktreeClean,
+    canMerge: incomingCount > 0 && worktreeClean,
+    message: incomingCount > 0
+      ? `${incomingCount} template update${incomingCount === 1 ? "" : "s"} available.`
+      : "This app is current with AppTemplateBase.",
+  };
+}
+
+function mergeTemplateUpdates() {
+  const status = getTemplateUpdateStatus({ fetch: true });
+  if (!status.ok || !status.configured || !status.branch || status.incomingCount === 0) {
+    return status;
+  }
+  if (!status.worktreeClean) {
+    return {
+      ...status,
+      ok: false,
+      canMerge: false,
+      message: "Commit or stash local changes before merging template updates.",
+    };
+  }
+
+  const merged = runGit(["merge", "--no-edit", status.branch], { timeoutMs: 60_000 });
+  if (merged.status !== 0) {
+    runGit(["merge", "--abort"]);
+    return {
+      ...getTemplateUpdateStatus(),
+      ok: false,
+      message: `Template merge was aborted safely: ${(merged.stderr || merged.stdout || "merge conflict").trim()}`,
+    };
+  }
+  return {
+    ...getTemplateUpdateStatus(),
+    ok: true,
+    merged: true,
+    message: `Merged ${status.incomingCount} template update${status.incomingCount === 1 ? "" : "s"} successfully.`,
+  };
+}
+
 function getLocalAiLogPath(app) {
   return path.join(app.getPath("logs"), "local-ai-setup.log");
 }
@@ -550,6 +677,10 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, nativeImage, 
   ipcMain.handle("desktop:reinstall-linux-package", () => runReinstall(app));
 
   ipcMain.handle("desktop:package-and-reinstall-linux", () => runPackageAndReinstall(app));
+  ipcMain.handle("desktop:get-template-update-status", (_event, options) => getTemplateUpdateStatus({
+    fetch: Boolean(options?.fetch),
+  }));
+  ipcMain.handle("desktop:merge-template-updates", () => mergeTemplateUpdates());
 
   const iconDirectory = path.join(repoRoot, "electron", "assets", "icons");
   const iconSourcePath = path.join(iconDirectory, "icon-source.png");

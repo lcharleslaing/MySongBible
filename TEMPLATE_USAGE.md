@@ -56,6 +56,13 @@ git merge upstream/main
 
 Run `npm run template:update:check` to perform the same check without starting the app.
 
+The cloned desktop app also provides **Settings → Template Updates** controls:
+
+- **Check for Updates** fetches AppTemplateBase and lists incoming commits.
+- **Merge Updates** applies them when the app worktree is clean.
+
+If Git reports a conflict, the desktop action aborts the merge and restores the app to its pre-merge state.
+
 If you want to rename more fields manually, update these template-facing values.
 
 ### App Name

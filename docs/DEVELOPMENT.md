@@ -27,6 +27,8 @@ The bootstrap script will:
 
 The template update check only fetches and reports incoming commits. It does not merge them into app-specific code. It is non-blocking when offline.
 
+In an adopted desktop clone, Settings includes a Template Updates panel for checking and merging without terminal commands. Merge is disabled while the worktree has uncommitted changes, and conflicting merges are aborted automatically.
+
 ## Run Modes
 
 ### Full Desktop App
