@@ -19,10 +19,13 @@ npm start
 
 The bootstrap script will:
 
+- check the cloned app's `upstream` AppTemplateBase remote for updates
 - install root and frontend Node dependencies when needed
 - create `backend/.venv` when missing
 - install backend Python dependencies when needed
 - launch the frontend and Electron app
+
+The template update check only fetches and reports incoming commits. It does not merge them into app-specific code. It is non-blocking when offline.
 
 ## Run Modes
 

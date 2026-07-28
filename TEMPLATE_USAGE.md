@@ -47,6 +47,15 @@ npm run template:repository
 
 Saving App Identity later reruns repository synchronization automatically, commits the generated identity files, and pushes them to the app's `origin`.
 
+Every later `npm start` performs a non-destructive upstream update check. It fetches AppTemplateBase, reports available template commits, and continues startup. It never merges automatically. Review and apply reported updates with:
+
+```bash
+git log --oneline HEAD..upstream/main
+git merge upstream/main
+```
+
+Run `npm run template:update:check` to perform the same check without starting the app.
+
 If you want to rename more fields manually, update these template-facing values.
 
 ### App Name
