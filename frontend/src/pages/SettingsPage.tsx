@@ -447,15 +447,15 @@ export function SettingsPage() {
       setIsSaving(true);
       setIdentityError("");
       if (identityStep < 3) {
+        setIdentityMessage(`${["Basics", "Navigation", "Home screen"][identityStep]} ready.`);
+        setIdentityStep((identityStep + 1) as IdentityStep);
+      } else {
         const saved = await updateAppDefinition(buildAppDefinitionPayload(identityDraft));
         const savedIdentity = buildFormState(saved);
         setAppDefinition(saved.app_definition);
         setFormState((current) => mergeIdentity(current, savedIdentity));
         setSavedState((current) => mergeIdentity(current, savedIdentity));
         setIdentityDraft((current) => mergeIdentity(current, savedIdentity));
-        setIdentityMessage(`${["Basics", "Navigation", "Home screen"][identityStep]} saved.`);
-        setIdentityStep((identityStep + 1) as IdentityStep);
-      } else {
         setIsIdentityOpen(false);
         setStatusMessage("App Identity is up to date.");
       }
@@ -787,7 +787,7 @@ export function SettingsPage() {
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">App Identity</p>
                       <h2 id="app-identity-title" className="mt-1 text-2xl font-semibold">Edit app identity</h2>
-                      <p className="mt-1 text-sm text-base-content/60">Each step is saved before you continue.</p>
+                      <p className="mt-1 text-sm text-base-content/60">Review each step, then save all identity changes when you finish.</p>
                     </div>
                     <button type="button" className="btn btn-circle btn-ghost btn-sm" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)} disabled={isSaving}>✕</button>
                   </div>
@@ -837,7 +837,7 @@ export function SettingsPage() {
 
                   <div className="modal-action mt-6 justify-between">
                     <button type="button" className="btn btn-ghost" onClick={() => { setIdentityError(""); setIdentityMessage(""); setIdentityStep((identityStep - 1) as IdentityStep); }} disabled={identityStep === 0 || isSaving}>Back</button>
-                    <button type="button" className="btn btn-primary" onClick={saveIdentityStep} disabled={isSaving}>{isSaving ? "Saving…" : identityStep === 3 ? "Done" : "Save & Continue"}</button>
+                    <button type="button" className="btn btn-primary" onClick={saveIdentityStep} disabled={isSaving}>{isSaving ? "Saving…" : identityStep === 3 ? "Save & Finish" : "Continue"}</button>
                   </div>
                 </div>
                 <button type="button" className="modal-backdrop" aria-label="Close App Identity editor" onClick={() => setIsIdentityOpen(false)}>close</button>
