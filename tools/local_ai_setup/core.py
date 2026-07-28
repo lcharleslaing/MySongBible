@@ -147,11 +147,15 @@ def is_placeholder(key: str, value: str | None) -> bool:
         return True
     placeholder_values = {
         "mock",
+        "None",
+        "none",
+        "null",
         "TODO",
         "CHANGE_ME",
         "/path/to/voice-model.onnx",
         "/absolute/path/to/piper",
         "/absolute/path/to/whisper-cli",
+        "/home/llaing/whisper.cpp/build/bin/whisper-cli",
     }
     if raw in placeholder_values:
         return True

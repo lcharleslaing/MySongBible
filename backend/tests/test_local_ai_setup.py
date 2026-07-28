@@ -61,6 +61,32 @@ def test_env_update_treats_default_tts_output_as_placeholder(tmp_path: Path, mon
     assert "TTS_OUTPUT_DIR=backend/data/audio/tts" in env_path.read_text(encoding="utf-8")
 
 
+def test_env_update_replaces_legacy_clone_placeholders(tmp_path: Path, monkeypatch) -> None:
+    env_path = tmp_path / ".env"
+    example_path = tmp_path / ".env.example"
+    env_path.write_text(
+        "WHISPER_CPP_BINARY=/home/llaing/whisper.cpp/build/bin/whisper-cli\n"
+        "WHISPER_MODEL_PATH=None\n",
+        encoding="utf-8",
+    )
+    example_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(core, "BACKEND_ENV_PATH", env_path)
+    monkeypatch.setattr(core, "BACKEND_ENV_EXAMPLE_PATH", example_path)
+
+    result = core.update_backend_env(
+        {
+            "WHISPER_CPP_BINARY": "/home/current/whisper-cli",
+            "WHISPER_MODEL_PATH": "/home/current/ggml-tiny.en.bin",
+        },
+    )
+
+    assert result.status == "PASS"
+    assert env_path.read_text(encoding="utf-8") == (
+        "WHISPER_CPP_BINARY=/home/current/whisper-cli\n"
+        "WHISPER_MODEL_PATH=/home/current/ggml-tiny.en.bin\n"
+    )
+
+
 def test_piper_validation_rejects_usr_bin_piper() -> None:
     result = core.validate_piper_cli(Path("/usr/bin/piper"))
 
@@ -105,6 +131,7 @@ def test_summary_uses_configured_whisper_model_path(tmp_path: Path, monkeypatch,
 
     output = capsys.readouterr().out
     assert f"- Whisper model: PASS {model}" in output
+    assert "- backend/.env update: SKIPPED (check-only command)" in output
 
 
 def test_stt_config_without_sample_wav_passes(tmp_path: Path, monkeypatch) -> None:

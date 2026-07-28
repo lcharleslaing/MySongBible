@@ -38,7 +38,10 @@ def print_summary(stt: Result, tts: Result, env_updated: Result | None = None) -
     print(f"- Piper binary: {'PASS ' + str(wrapper) if wrapper.exists() else 'WARN not found yet'}")
     piper_model = piper_model_path(DEFAULT_PIPER_VOICE, paths["root"])
     print(f"- Piper model: {'PASS ' + str(piper_model) if piper_model.exists() else 'WARN not found yet'}")
-    print(f"- backend/.env updated: {(env_updated or Result()).status}")
+    if env_updated is not None:
+        print(f"- backend/.env update: {env_updated.status}")
+    else:
+        print("- backend/.env update: SKIPPED (check-only command)")
     print(f"- STT check: {stt.status}")
     print(f"- TTS check: {tts.status}")
 
