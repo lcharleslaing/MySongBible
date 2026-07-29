@@ -27,6 +27,7 @@ declare global {
       packageAndReinstallLinux: () => Promise<PackageActionResult>;
       getTemplateUpdateStatus: (options?: { fetch?: boolean }) => Promise<TemplateUpdateStatusResult>;
       mergeTemplateUpdates: () => Promise<TemplateUpdateStatusResult>;
+      saveAndMergeTemplateUpdates: () => Promise<TemplateUpdateStatusResult>;
       getAppIcon: () => Promise<AppIconResult>;
       pickAppIcon: () => Promise<AppIconResult & { canceled: boolean }>;
       localAi: {
@@ -116,6 +117,8 @@ declare global {
     worktreeClean: boolean;
     canMerge: boolean;
     merged?: boolean;
+    localChangesSaved?: boolean;
+    localSaveCommit?: string | null;
     message: string;
   };
 

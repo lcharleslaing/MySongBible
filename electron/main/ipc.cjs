@@ -106,11 +106,11 @@ function getNpmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
-function runGit(args, { timeoutMs = 15_000 } = {}) {
+function runGit(args, { timeoutMs = 15_000, env = {} } = {}) {
   return spawnSync("git", args, {
     cwd: repoRoot,
     encoding: "utf-8",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env },
     stdio: ["ignore", "pipe", "pipe"],
     timeout: timeoutMs,
   });
@@ -202,12 +202,90 @@ function getTemplateUpdateStatus({ fetch = false } = {}) {
   };
 }
 
-function mergeTemplateUpdates() {
+function createTemplateUpdateSavePoint() {
+  if (gitText(["status", "--porcelain"]) === "") {
+    return {
+      ok: true,
+      saved: false,
+      commit: null,
+      message: "Worktree is already clean.",
+    };
+  }
+
+  const added = runGit(["add", "-A"], { timeoutMs: 30_000 });
+  if (added.status !== 0) {
+    return {
+      ok: false,
+      saved: false,
+      commit: null,
+      message: (added.stderr || added.error?.message || "Could not stage local changes.").trim(),
+    };
+  }
+
+  const committed = runGit(
+    [
+      "commit",
+      "-m",
+      "Save local app changes before template update",
+      "-m",
+      "Created by the AppTemplateBase Template Updates workflow.",
+    ],
+    {
+      timeoutMs: 60_000,
+      env: {
+        GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || "AppTemplateBase",
+        GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || "apptemplatebase@local",
+        GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || "AppTemplateBase",
+        GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || "apptemplatebase@local",
+      },
+    },
+  );
+  if (committed.status !== 0) {
+    return {
+      ok: false,
+      saved: false,
+      commit: null,
+      message: (committed.stderr || committed.stdout || committed.error?.message || "Could not commit local changes.").trim(),
+    };
+  }
+
+  return {
+    ok: true,
+    saved: true,
+    commit: gitText(["rev-parse", "--short", "HEAD"]),
+    message: "Local changes were committed before merging template updates.",
+  };
+}
+
+function mergeTemplateUpdates({ saveLocalChanges = false } = {}) {
   const status = getTemplateUpdateStatus({ fetch: true });
   if (!status.ok || !status.configured || !status.branch || status.incomingCount === 0) {
     return status;
   }
   if (!status.worktreeClean) {
+    if (saveLocalChanges) {
+      const saved = createTemplateUpdateSavePoint();
+      if (!saved.ok) {
+        return {
+          ...status,
+          ok: false,
+          canMerge: false,
+          message: `Could not save local changes before merging: ${saved.message}`,
+        };
+      }
+      const afterSaveStatus = getTemplateUpdateStatus();
+      if (!afterSaveStatus.worktreeClean) {
+        return {
+          ...afterSaveStatus,
+          ok: false,
+          canMerge: false,
+          localChangesSaved: saved.saved,
+          localSaveCommit: saved.commit,
+          message: "Local changes were saved, but the worktree is still not clean enough to merge.",
+        };
+      }
+      return mergeCleanTemplateUpdates(afterSaveStatus, saved);
+    }
     return {
       ...status,
       ok: false,
@@ -216,12 +294,18 @@ function mergeTemplateUpdates() {
     };
   }
 
+  return mergeCleanTemplateUpdates(status);
+}
+
+function mergeCleanTemplateUpdates(status, savePoint = null) {
   const merged = runGit(["merge", "--no-edit", status.branch], { timeoutMs: 60_000 });
   if (merged.status !== 0) {
     runGit(["merge", "--abort"]);
     return {
       ...getTemplateUpdateStatus(),
       ok: false,
+      localChangesSaved: Boolean(savePoint?.saved),
+      localSaveCommit: savePoint?.commit || null,
       message: `Template merge was aborted safely: ${(merged.stderr || merged.stdout || "merge conflict").trim()}`,
     };
   }
@@ -229,7 +313,9 @@ function mergeTemplateUpdates() {
     ...getTemplateUpdateStatus(),
     ok: true,
     merged: true,
-    message: `Merged ${status.incomingCount} template update${status.incomingCount === 1 ? "" : "s"} successfully.`,
+    localChangesSaved: Boolean(savePoint?.saved),
+    localSaveCommit: savePoint?.commit || null,
+    message: `${savePoint?.saved ? `Saved local changes in ${savePoint.commit}, then merged` : "Merged"} ${status.incomingCount} template update${status.incomingCount === 1 ? "" : "s"} successfully.`,
   };
 }
 
@@ -681,6 +767,7 @@ function registerDesktopIpc({ app, BrowserWindow, dialog, ipcMain, nativeImage, 
     fetch: Boolean(options?.fetch),
   }));
   ipcMain.handle("desktop:merge-template-updates", () => mergeTemplateUpdates());
+  ipcMain.handle("desktop:save-and-merge-template-updates", () => mergeTemplateUpdates({ saveLocalChanges: true }));
 
   const iconDirectory = path.join(repoRoot, "electron", "assets", "icons");
   const iconSourcePath = path.join(iconDirectory, "icon-source.png");

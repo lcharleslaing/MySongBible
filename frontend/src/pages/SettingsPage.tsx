@@ -671,6 +671,26 @@ export function SettingsPage() {
     }
   };
 
+  const saveAndMergeTemplateUpdates = async () => {
+    try {
+      setIsTemplateUpdateRunning(true);
+      setTemplateUpdateError("");
+      const result = await window.desktop?.saveAndMergeTemplateUpdates();
+      if (!result) {
+        setTemplateUpdateError("Template update actions are available only in the desktop app.");
+        return;
+      }
+      setTemplateUpdateStatus(result);
+      if (!result.ok) {
+        setTemplateUpdateError(result.message);
+      }
+    } catch (error) {
+      setTemplateUpdateError(error instanceof Error ? error.message : "Could not save local changes and merge template updates.");
+    } finally {
+      setIsTemplateUpdateRunning(false);
+    }
+  };
+
   const applySelectedDeviceProfile = async () => {
     const deviceName = formState.selectedDeviceName.trim();
     if (!deviceName) {
@@ -1380,7 +1400,7 @@ export function SettingsPage() {
 
               {templateUpdateStatus?.incomingCount && !templateUpdateStatus.worktreeClean ? (
                 <div className="alert alert-warning mt-3 py-2">
-                  <span className="text-xs">Commit or stash local changes before merging.</span>
+                  <span className="text-xs">Local changes are blocking a direct merge. Save them as a local commit, then merge the template updates.</span>
                 </div>
               ) : null}
 
@@ -1408,6 +1428,16 @@ export function SettingsPage() {
                 >
                   Merge Updates
                 </button>
+                {templateUpdateStatus?.incomingCount && !templateUpdateStatus.worktreeClean ? (
+                  <button
+                    type="button"
+                    className="btn btn-warning btn-sm"
+                    onClick={saveAndMergeTemplateUpdates}
+                    disabled={isTemplateUpdateRunning}
+                  >
+                    Save Local Changes & Merge
+                  </button>
+                ) : null}
               </div>
 
               {templateUpdateStatus?.upstreamUrl ? (

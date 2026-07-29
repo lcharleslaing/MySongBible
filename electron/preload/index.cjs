@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("desktop", {
   packageAndReinstallLinux: () => ipcRenderer.invoke("desktop:package-and-reinstall-linux"),
   getTemplateUpdateStatus: (options) => ipcRenderer.invoke("desktop:get-template-update-status", options),
   mergeTemplateUpdates: () => ipcRenderer.invoke("desktop:merge-template-updates"),
+  saveAndMergeTemplateUpdates: () => ipcRenderer.invoke("desktop:save-and-merge-template-updates"),
   getAppIcon: () => ipcRenderer.invoke("desktop:get-app-icon"),
   pickAppIcon: () => ipcRenderer.invoke("desktop:pick-app-icon"),
   localAi: {
