@@ -202,6 +202,7 @@ async def create_audio_journal_entry(
     notes: str | None = Form(default=None),
     tags_json: str | None = Form(default=None),
     script_text: str | None = Form(default=None),
+    metadata_json: str | None = Form(default=None),
     service: AudioJournalService = Depends(get_audio_journal_service),
 ) -> AudioJournalUploadResponse:
     try:
@@ -213,6 +214,7 @@ async def create_audio_journal_entry(
                 notes=notes,
                 tags_json=tags_json,
                 voice_style=voice_style,
+                metadata_json=metadata_json,
             ),
         )
         return AudioJournalUploadResponse(

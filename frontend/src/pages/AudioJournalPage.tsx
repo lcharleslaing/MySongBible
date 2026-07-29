@@ -137,6 +137,18 @@ function parseMetadata(value: string | null | undefined) {
   }
 }
 
+function entrySourceLabel(entry: AudioJournalEntryRecord | null | undefined) {
+  const metadata = parseMetadata(entry?.metadata_json);
+  switch (metadata.created_from) {
+    case "simple-recorder":
+      return "Simple Recorder";
+    case "full-audio-journal":
+      return "Full Journal";
+    default:
+      return "Audio Journal";
+  }
+}
+
 function takeLabel(take: AudioJournalTakeRecord | null | undefined) {
   if (!take) {
     return "None";
@@ -506,6 +518,10 @@ export function AudioJournalPage() {
     formData.append("audio_file", audioBlob, recordedFileName || `audio-journal-recording.${recordedMimeType.includes("ogg") ? "ogg" : "webm"}`);
     formData.append("title", title);
     formData.append("voice_style", "natural");
+    formData.append("metadata_json", JSON.stringify({
+      created_from: "simple-recorder",
+      created_from_label: "Simple Recorder",
+    }));
 
     setWorkingAction("create-entry");
     setSimpleSavingEntryId(null);
@@ -975,25 +991,42 @@ export function AudioJournalPage() {
                   {entries.map((entry) => {
                     const active = entry.takes.find((take) => take.id === entry.active_take_id) || entry.takes[0] || null;
                     return (
-                      <button
+                      <div
                         key={entry.id}
-                        type="button"
                         className={`w-full rounded-lg border p-3 text-left transition ${
                           selectedEntry?.id === entry.id ? "border-primary bg-primary/10" : "border-base-300 bg-base-100 hover:bg-base-200"
                         }`}
-                        onClick={() => {
-                          setSelectedEntry(entry);
-                          setSelectedTakeId(active?.id || null);
-                        }}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold">{entry.title}</p>
-                            <p className="text-xs text-base-content/60">{formatDate(entry.created_at)}</p>
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => {
+                            setSelectedEntry(entry);
+                            setSelectedTakeId(active?.id || null);
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold">{entry.title}</p>
+                              <p className="text-xs text-base-content/60">{formatDate(entry.created_at)}</p>
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <span className="badge badge-primary badge-outline">{entrySourceLabel(entry)}</span>
+                              <span className="badge badge-outline">{active?.transcription_status || "no take"}</span>
+                            </div>
                           </div>
-                          <span className="badge badge-outline">{active?.transcription_status || "no take"}</span>
+                        </button>
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            className="btn btn-error btn-outline btn-xs"
+                            disabled={workingAction === "delete-entry"}
+                            onClick={() => handleDeleteEntry(entry)}
+                          >
+                            Delete
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1010,9 +1043,20 @@ export function AudioJournalPage() {
                       <h2 className="card-title text-2xl">{selectedEntry.title}</h2>
                       <p className="text-sm text-base-content/60">{formatDate(selectedEntry.created_at)}</p>
                     </div>
-                    <button type="button" className="btn btn-sm" onClick={() => setJournalMode("advanced")}>
-                      Open Full Journal
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <span className="badge badge-primary badge-outline">{entrySourceLabel(selectedEntry)}</span>
+                      <button type="button" className="btn btn-sm" onClick={() => setJournalMode("advanced")}>
+                        Open Full Journal
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-error btn-outline btn-sm"
+                        disabled={workingAction === "delete-entry"}
+                        onClick={() => handleDeleteEntry(selectedEntry)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
 
                   {takeAudioUrl ? <audio className="w-full" controls src={takeAudioUrl} /> : null}
@@ -1306,6 +1350,7 @@ export function AudioJournalPage() {
                           <p className="text-xs text-base-content/60">{formatDate(entry.journal_date || entry.created_at)}</p>
                         </div>
                         <div className="flex flex-wrap justify-end gap-2">
+                          <span className="badge badge-primary badge-outline">{entrySourceLabel(entry)}</span>
                           <span className={`badge ${qualityBadgeClass(entry.overall_quality_status)}`}>
                             {entry.overall_quality_status}
                           </span>
@@ -1371,6 +1416,7 @@ export function AudioJournalPage() {
                       <p className="text-sm text-base-content/60">Created {formatDate(selectedEntry.created_at)}</p>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
+                      <span className="badge badge-primary badge-outline">{entrySourceLabel(selectedEntry)}</span>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
