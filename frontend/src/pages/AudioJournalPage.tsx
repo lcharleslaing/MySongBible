@@ -141,11 +141,11 @@ function entrySourceLabel(entry: AudioJournalEntryRecord | null | undefined) {
   const metadata = parseMetadata(entry?.metadata_json);
   switch (metadata.created_from) {
     case "simple-recorder":
-      return "Simple Recorder";
+      return "Simple";
     case "full-audio-journal":
-      return "Full Journal";
+      return "Full";
     default:
-      return "Audio Journal";
+      return "Full";
   }
 }
 
@@ -481,6 +481,10 @@ export function AudioJournalPage() {
     if (newEntryNotes.trim()) {
       formData.append("notes", newEntryNotes.trim());
     }
+    formData.append("metadata_json", JSON.stringify({
+      created_from: "full-audio-journal",
+      created_from_label: "Full",
+    }));
 
     try {
       const response = await createAudioJournalEntry(formData);
@@ -520,7 +524,7 @@ export function AudioJournalPage() {
     formData.append("voice_style", "natural");
     formData.append("metadata_json", JSON.stringify({
       created_from: "simple-recorder",
-      created_from_label: "Simple Recorder",
+      created_from_label: "Simple",
     }));
 
     setWorkingAction("create-entry");
