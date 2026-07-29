@@ -188,6 +188,7 @@ export function ListenCommandsPage() {
   });
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const chunkPartsRef = useRef<Blob[]>([]);
   const chunkQueueRef = useRef<Blob[]>([]);
   const isProcessingRef = useRef(false);
   const currentSessionRef = useRef<ListeningSessionRecord | null>(null);
@@ -195,6 +196,8 @@ export function ListenCommandsPage() {
   const mimeTypeRef = useRef("");
   const documentEndRef = useRef<HTMLDivElement | null>(null);
   const retainedTranscriptRef = useRef("");
+  const shouldContinueRecordingRef = useRef(false);
+  const chunkTimerRef = useRef<number | null>(null);
 
   const activeBlocks = useMemo(() => currentSession?.blocks.filter((block) => block.status !== "deleted") || [], [currentSession]);
 
@@ -208,6 +211,10 @@ export function ListenCommandsPage() {
 
   useEffect(() => {
     return () => {
+      shouldContinueRecordingRef.current = false;
+      if (chunkTimerRef.current) {
+        window.clearTimeout(chunkTimerRef.current);
+      }
       mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
@@ -265,6 +272,61 @@ export function ListenCommandsPage() {
     chunkQueueRef.current.push(chunk);
     setPendingChunks(chunkQueueRef.current.length + (isProcessingRef.current ? 1 : 0));
     processChunkQueue();
+  };
+
+  const startRecorderChunk = (stream: MediaStream) => {
+    if (!shouldContinueRecordingRef.current) {
+      return;
+    }
+    const supportedMimeType = getSupportedMimeType();
+    const recorder = supportedMimeType ? new MediaRecorder(stream, { mimeType: supportedMimeType }) : new MediaRecorder(stream);
+    chunkPartsRef.current = [];
+    mediaRecorderRef.current = recorder;
+    mimeTypeRef.current = recorder.mimeType || supportedMimeType || "audio/webm";
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunkPartsRef.current.push(event.data);
+      }
+    };
+    recorder.onerror = () => {
+      setMicrophoneError("Recording failed. Check microphone permissions and try again.");
+      setListeningState("Microphone unavailable");
+      shouldContinueRecordingRef.current = false;
+    };
+    recorder.onstop = () => {
+      const parts = chunkPartsRef.current;
+      chunkPartsRef.current = [];
+      if (parts.length) {
+        enqueueChunk(new Blob(parts, { type: mimeTypeRef.current || "audio/webm" }));
+      }
+      if (shouldContinueRecordingRef.current && stream.active) {
+        window.setTimeout(() => startRecorderChunk(stream), 0);
+      }
+    };
+    recorder.start();
+    setListeningState("Listening");
+    chunkTimerRef.current = window.setTimeout(() => {
+      stopCurrentRecorderChunk().catch(() => undefined);
+    }, liveChunkMs);
+  };
+
+  const stopCurrentRecorderChunk = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      return;
+    }
+    if (chunkTimerRef.current) {
+      window.clearTimeout(chunkTimerRef.current);
+      chunkTimerRef.current = null;
+    }
+    await new Promise<void>((resolve) => {
+      const previousOnStop = recorder.onstop;
+      recorder.onstop = (event) => {
+        previousOnStop?.call(recorder, event);
+        resolve();
+      };
+      recorder.stop();
+    });
   };
 
   const splitWithRetainedTail = (text: string, force = false) => {
@@ -328,8 +390,9 @@ export function ListenCommandsPage() {
           setListeningState("Listening");
         }
       } catch (nextError) {
-        setSpeechError(errorMessage(nextError, "Speech service unavailable."));
-        setListeningState("Speech service unavailable");
+        const message = errorMessage(nextError, "Speech service unavailable.");
+        setSpeechError(message.includes("convert audio to WAV") ? "Skipped one unreadable live audio chunk. Listening will continue." : message);
+        setListeningState(mediaRecorderRef.current?.state === "recording" ? "Listening" : "Speech service unavailable");
       } finally {
         setPendingChunks(chunkQueueRef.current.length);
       }
@@ -375,33 +438,17 @@ export function ListenCommandsPage() {
     setCurrentSession(session);
     currentSessionRef.current = session;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const supportedMimeType = getSupportedMimeType();
-    const recorder = supportedMimeType ? new MediaRecorder(stream, { mimeType: supportedMimeType }) : new MediaRecorder(stream);
     mediaStreamRef.current = stream;
-    mediaRecorderRef.current = recorder;
-    mimeTypeRef.current = recorder.mimeType || supportedMimeType || "audio/webm";
-    recorder.ondataavailable = (event) => enqueueChunk(event.data);
-    recorder.onerror = () => {
-      setMicrophoneError("Recording failed. Check microphone permissions and try again.");
-      setListeningState("Microphone unavailable");
-    };
-    recorder.onstop = () => {
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-      processChunkQueue();
-    };
-    recorder.start(liveChunkMs);
-    setListeningState("Listening");
+    shouldContinueRecordingRef.current = true;
+    startRecorderChunk(stream);
     setStatus("Listening live. Speech is transcribed and saved automatically.");
   }, "Could not start listening.");
 
   const stopSession = () => run(async () => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.requestData();
-      recorder.stop();
-    }
+    shouldContinueRecordingRef.current = false;
+    await stopCurrentRecorderChunk();
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
     await waitForSpeechQueue();
     await flushRetainedTranscript();
     if (currentSession) {
@@ -412,10 +459,9 @@ export function ListenCommandsPage() {
   }, "Could not stop listening.");
 
   const pauseSession = () => run(async () => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder?.state === "recording") {
-      recorder.requestData();
-      recorder.pause();
+    if (mediaRecorderRef.current?.state === "recording") {
+      shouldContinueRecordingRef.current = false;
+      await stopCurrentRecorderChunk();
       setListeningState("Paused");
       await waitForSpeechQueue();
       await flushRetainedTranscript();
@@ -426,10 +472,10 @@ export function ListenCommandsPage() {
   }, "Could not pause listening.");
 
   const resumeSession = () => run(async () => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder?.state === "paused") {
-      recorder.resume();
-      setListeningState("Listening");
+    const stream = mediaStreamRef.current;
+    if (stream && listeningState === "Paused") {
+      shouldContinueRecordingRef.current = true;
+      startRecorderChunk(stream);
       if (currentSession) {
         setCurrentSession(await updateListeningSession(currentSession.id, { status: "active" }));
       }
@@ -447,10 +493,10 @@ export function ListenCommandsPage() {
     if (!currentSession || !window.confirm("Discard this session?")) {
       return;
     }
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
-    }
+    shouldContinueRecordingRef.current = false;
+    await stopCurrentRecorderChunk();
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
     retainedTranscriptRef.current = "";
     await updateListeningSession(currentSession.id, { status: "deleted" });
     setCurrentSession(null);
