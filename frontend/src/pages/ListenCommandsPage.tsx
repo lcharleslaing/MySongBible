@@ -229,6 +229,7 @@ export function ListenCommandsPage() {
   const [assetUrls, setAssetUrls] = useState<Record<number, string>>({});
   const [listeningState, setListeningState] = useState<ListeningState>("Idle");
   const [pendingChunks, setPendingChunks] = useState(0);
+  const [isFinalizingSession, setIsFinalizingSession] = useState(false);
   const [microphoneError, setMicrophoneError] = useState("");
   const [speechError, setSpeechError] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
@@ -252,6 +253,7 @@ export function ListenCommandsPage() {
   const documentEndRef = useRef<HTMLDivElement | null>(null);
   const retainedTranscriptRef = useRef("");
   const isListeningRef = useRef(false);
+  const isFinalizingRef = useRef(false);
   const isSpeechActiveRef = useRef(false);
   const speechStartedAtRef = useRef(0);
   const lastSpeechAtRef = useRef(0);
@@ -520,11 +522,11 @@ export function ListenCommandsPage() {
       } catch (nextError) {
         const message = errorMessage(nextError, "Speech service unavailable.");
         if (message.includes("No speech detected") || message.includes("No speech text to save")) {
-          setListeningState(isListeningRef.current ? "Listening" : listeningState);
+          setListeningState((state) => isListeningRef.current ? "Listening" : state);
           continue;
         }
         setSpeechError(message.includes("convert audio to WAV") ? "Skipped one unreadable live audio chunk. Listening will continue." : message);
-        setListeningState(isListeningRef.current ? "Listening" : "Speech service unavailable");
+        setListeningState((state) => isListeningRef.current ? "Listening" : state);
       } finally {
         setPendingChunks(chunkQueueRef.current.length);
       }
@@ -546,6 +548,29 @@ export function ListenCommandsPage() {
     const finalText = splitWithRetainedTail("", true);
     if (session && finalText) {
       await appendFinalizedText(session, finalText, null);
+    }
+  };
+
+  const finishQueuedSpeechAndSave = async (targetStatus?: "active" | "draft" | "stopped") => {
+    if (isFinalizingRef.current) {
+      return;
+    }
+    isFinalizingRef.current = true;
+    setIsFinalizingSession(true);
+    try {
+      await waitForSpeechQueue();
+      await flushRetainedTranscript();
+      const session = currentSessionRef.current;
+      if (session) {
+        const saved = await updateListeningSession(session.id, { status: targetStatus || session.status });
+        syncSessionState(saved);
+        setStatus(`Session saved. ${saved.blocks.length} block${saved.blocks.length === 1 ? "" : "s"} currently in the document.`);
+      }
+    } catch (nextError) {
+      setError(errorMessage(nextError, "Could not finish saving queued speech."));
+    } finally {
+      isFinalizingRef.current = false;
+      setIsFinalizingSession(false);
     }
   };
 
@@ -576,26 +601,17 @@ export function ListenCommandsPage() {
 
   const stopSession = () => run(async () => {
     await stopAudioPipeline({ flush: true });
-    await waitForSpeechQueue();
-    await flushRetainedTranscript();
-    const session = currentSessionRef.current;
-    if (session) {
-      syncSessionState(await updateListeningSession(session.id, { status: "stopped" }));
-    }
     setListeningState("Stopped");
-    setStatus("Listening stopped and saved.");
+    setStatus(pendingChunks ? "Microphone stopped. Finishing queued transcription in the background." : "Microphone stopped.");
+    void finishQueuedSpeechAndSave("stopped");
   }, "Could not stop listening.");
 
   const pauseSession = () => run(async () => {
     if (isListeningRef.current) {
       await stopAudioPipeline({ flush: true });
       setListeningState("Paused");
-      await waitForSpeechQueue();
-      await flushRetainedTranscript();
-      const session = currentSessionRef.current;
-      if (session) {
-        syncSessionState(await updateListeningSession(session.id, { status: "draft" }));
-      }
+      setStatus(pendingChunks ? "Paused. Finishing queued transcription in the background." : "Paused.");
+      void finishQueuedSpeechAndSave("draft");
     }
   }, "Could not pause listening.");
 
@@ -613,14 +629,8 @@ export function ListenCommandsPage() {
     if (isListeningRef.current) {
       finalizeUtterance();
     }
-    await waitForSpeechQueue();
-    await flushRetainedTranscript();
-    const session = currentSessionRef.current;
-    if (session) {
-      const saved = await updateListeningSession(session.id, { status: session.status });
-      syncSessionState(saved);
-      setStatus(`Session saved. ${saved.blocks.length} block${saved.blocks.length === 1 ? "" : "s"} currently in the document.`);
-    }
+    setStatus(pendingChunks ? "Save started. Finishing queued transcription in the background." : "Save started.");
+    void finishQueuedSpeechAndSave();
   }, "Could not save session.");
 
   const discardSession = () => {
@@ -769,6 +779,7 @@ export function ListenCommandsPage() {
               <button className="btn btn-outline btn-sm" disabled={!currentSession || listeningState === "Idle" || listeningState === "Stopped"} onClick={stopSession}>Stop</button>
               <button className="btn btn-ghost btn-sm" disabled={!currentSession} onClick={saveSession}>Save</button>
               <button className="btn btn-error btn-outline btn-sm" disabled={!currentSession} onClick={discardSession}>Discard</button>
+              {isFinalizingSession ? <span className="badge badge-info gap-2"><span className="loading loading-spinner loading-xs" />Saving speech</span> : null}
               {pendingChunks ? <span className="badge badge-outline">{pendingChunks} chunk{pendingChunks === 1 ? "" : "s"} queued</span> : null}
             </div>
 
