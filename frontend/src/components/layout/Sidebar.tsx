@@ -89,13 +89,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
 
         <ul className={`menu w-full gap-2 ${isCollapsed ? "items-center px-2 py-4" : "p-4"}`}>
           {navItems.map((item) => (
-            <li key={item.to}>
+            <li key={item.to} className={isCollapsed ? "flex w-full items-center justify-center" : undefined}>
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
                 title={isCollapsed ? item.label : undefined}
                 aria-label={isCollapsed ? item.label : undefined}
-                className={({ isActive }) => `${isActive ? "active" : ""} ${isCollapsed ? "tooltip tooltip-right h-11 w-11 justify-center px-0" : ""}`}
+                className={({ isActive }) => isCollapsed
+                  ? `tooltip tooltip-right !flex !h-11 !min-h-11 !w-11 !items-center !justify-center !rounded-box !p-0 ${isActive ? "active" : ""}`
+                  : isActive ? "active" : ""}
                 data-tip={isCollapsed ? item.label : undefined}
               >
                 <AppIcon name={item.icon} className="h-5 w-5 shrink-0" />
