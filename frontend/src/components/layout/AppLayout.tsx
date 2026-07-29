@@ -5,8 +5,8 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
 const sidebarWidthKey = "app-template-sidebar-width";
+const sidebarWidthModeKey = "app-template-sidebar-width-mode";
 const sidebarCollapsedKey = "app-template-sidebar-collapsed";
-const previousStaticSidebarWidth = 288;
 const collapsedSidebarWidth = 72;
 const minExpandedSidebarWidth = 180;
 const maxExpandedSidebarWidth = 420;
@@ -35,8 +35,11 @@ export function AppLayout() {
     return Math.min(Math.max(rawWidth, minExpandedSidebarWidth), maxExpandedSidebarWidth);
   }, [appDefinition, navLabels]);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (window.localStorage.getItem(sidebarWidthModeKey) !== "manual") {
+      return null;
+    }
     const saved = Number(window.localStorage.getItem(sidebarWidthKey));
-    return Number.isFinite(saved) && saved !== previousStaticSidebarWidth
+    return Number.isFinite(saved)
       ? Math.min(Math.max(saved, minExpandedSidebarWidth), maxExpandedSidebarWidth)
       : null;
   });
@@ -47,6 +50,7 @@ export function AppLayout() {
   useEffect(() => {
     if (sidebarWidth !== null) {
       window.localStorage.setItem(sidebarWidthKey, String(sidebarWidth));
+      window.localStorage.setItem(sidebarWidthModeKey, "manual");
     }
   }, [sidebarWidth]);
 
@@ -70,7 +74,10 @@ export function AppLayout() {
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
         width={expandedSidebarWidth}
-        setWidth={setSidebarWidth}
+        setWidth={(value) => {
+          window.localStorage.setItem(sidebarWidthModeKey, "manual");
+          setSidebarWidth(value);
+        }}
       />
     </div>
   );
