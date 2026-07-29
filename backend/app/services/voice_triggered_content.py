@@ -359,6 +359,11 @@ class VoiceTriggeredContentService:
         cleaned_payload_text = self._clean_speech_text(payload.text)
         if not cleaned_payload_text:
             raise VoiceTriggeredContentError("No speech text to save.", status_code=422)
+        insertion_target, insertion_left = self._prepare_block_insertion(
+            item,
+            payload.insertion_block_id,
+            payload.insertion_offset,
+        )
         blocks: list[SessionContentBlock] = []
         activations: list[TriggerActivationEvent] = []
         segment = TranscriptSegment(
@@ -386,6 +391,7 @@ class VoiceTriggeredContentService:
                     item,
                     segment=segment,
                     text=cleaned_payload_text[cursor:match.start],
+                    allow_merge=insertion_target is None,
                 )
                 if speech_block:
                     blocks.append(speech_block)
@@ -437,14 +443,27 @@ class VoiceTriggeredContentService:
                 item,
                 segment=segment,
                 text=cleaned_payload_text[cursor:],
+                allow_merge=insertion_target is None,
             )
             if speech_block:
                 blocks.append(speech_block)
 
         if not matches and not blocks:
-            speech_block = self._add_or_merge_transcript_block(item, segment=segment, text=cleaned_payload_text)
+            speech_block = self._add_or_merge_transcript_block(
+                item,
+                segment=segment,
+                text=cleaned_payload_text,
+                allow_merge=insertion_target is None,
+            )
             if speech_block:
                 blocks.append(speech_block)
+        if insertion_target is not None:
+            self._place_inserted_blocks(
+                session_id,
+                target=insertion_target,
+                left=insertion_left,
+                inserted=blocks,
+            )
         item.transcript_text = "\n".join(segment.text for segment in self.list_segments(session_id))
         item.updated_at = utc_now()
         item.last_saved_at = item.updated_at
@@ -461,6 +480,7 @@ class VoiceTriggeredContentService:
         *,
         segment: TranscriptSegment,
         text: str,
+        allow_merge: bool = True,
     ) -> SessionContentBlock | None:
         cleaned = self._clean_speech_text(text)
         if not cleaned:
@@ -471,7 +491,7 @@ class VoiceTriggeredContentService:
             .where(SessionContentBlock.status == "active")
             .order_by(SessionContentBlock.order_index.desc())
         ).first()
-        if previous and previous.block_type == "transcript":
+        if allow_merge and previous and previous.block_type == "transcript":
             previous.content = self._join_speech(previous.content or "", cleaned)
             previous.transcript_segment_id = segment.id
             previous.updated_at = utc_now()
@@ -528,9 +548,21 @@ class VoiceTriggeredContentService:
         self.session.refresh(block)
         return block
 
-    def manual_insert_trigger(self, session_id: int, trigger_id: int) -> tuple[TriggerActivationEvent, SessionContentBlock]:
+    def manual_insert_trigger(
+        self,
+        session_id: int,
+        trigger_id: int,
+        *,
+        insertion_block_id: int | None = None,
+        insertion_offset: int | None = None,
+    ) -> tuple[TriggerActivationEvent, SessionContentBlock]:
         item = self.get_session_record(session_id)
         trigger = self.get_trigger(trigger_id)
+        insertion_target, insertion_left = self._prepare_block_insertion(
+            item,
+            insertion_block_id,
+            insertion_offset,
+        )
         image_reference = self.get_asset(trigger.image_asset_id).managed_relative_path if trigger.image_asset_id and self.get_asset(trigger.image_asset_id) else None
         activation = TriggerActivationEvent(
             session_id=session_id,
@@ -565,7 +597,69 @@ class VoiceTriggeredContentService:
         self.session.add(item)
         self.session.commit()
         self.session.refresh(block)
+        if insertion_target is not None:
+            self._place_inserted_blocks(
+                session_id,
+                target=insertion_target,
+                left=insertion_left,
+                inserted=[block],
+            )
         return activation, block
+
+    def _prepare_block_insertion(
+        self,
+        item: ListeningSession,
+        block_id: int | None,
+        offset: int | None,
+    ) -> tuple[SessionContentBlock | None, SessionContentBlock | None]:
+        if block_id is None:
+            return None, None
+        target = self.session.get(SessionContentBlock, block_id)
+        if not target or target.session_id != item.id or target.status == "deleted":
+            return None, None
+        content = target.content or ""
+        split_at = min(offset if offset is not None else len(content), len(content))
+        prefix, suffix = content[:split_at], content[split_at:]
+        left = None
+        if prefix:
+            left = SessionContentBlock(
+                session_id=item.id or 0,
+                order_index=target.order_index,
+                block_type="transcript",
+                content=prefix,
+                metadata_json={"inserted_split_from": target.id},
+            )
+            self.session.add(left)
+        target.content = suffix
+        target.updated_at = utc_now()
+        self.session.add(target)
+        self.session.commit()
+        if left:
+            self.session.refresh(left)
+        self.session.refresh(target)
+        return target, left
+
+    def _place_inserted_blocks(
+        self,
+        session_id: int,
+        *,
+        target: SessionContentBlock,
+        left: SessionContentBlock | None,
+        inserted: list[SessionContentBlock],
+    ) -> None:
+        all_blocks = self.list_blocks(session_id)
+        inserted_ids = {block.id for block in inserted}
+        excluded_ids = inserted_ids | {target.id}
+        if left:
+            excluded_ids.add(left.id)
+        remaining = [block for block in all_blocks if block.id not in excluded_ids]
+        before = [block for block in remaining if block.order_index < target.order_index]
+        after = [block for block in remaining if block.order_index >= target.order_index]
+        ordered = before + ([left] if left else []) + inserted + [target] + after
+        for index, block in enumerate(ordered, start=1):
+            block.order_index = index
+            self.session.add(block)
+        self.session.commit()
 
     def update_block(self, block_id: int, payload: SessionContentBlockUpdate) -> SessionContentBlock:
         block = self.session.get(SessionContentBlock, block_id)

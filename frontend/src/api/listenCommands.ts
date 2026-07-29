@@ -226,7 +226,7 @@ export async function deleteListeningSession(sessionId: number) {
   }
 }
 
-export async function appendTranscriptSegment(sessionId: number, payload: { text: string; is_final?: boolean; source?: string; source_transcript_id?: number | null }) {
+export async function appendTranscriptSegment(sessionId: number, payload: { text: string; is_final?: boolean; source?: string; source_transcript_id?: number | null; insertion_block_id?: number | null; insertion_offset?: number | null }) {
   const response = await fetch(await buildApiUrl(`/api/listen-commands/sessions/${sessionId}/segments`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -257,9 +257,11 @@ export async function updateSessionBlock(blockId: number, payload: Partial<{ tit
   return parseJsonResponse<SessionContentBlockRecord>(response);
 }
 
-export async function manuallyInsertVoiceTrigger(sessionId: number, triggerId: number) {
+export async function manuallyInsertVoiceTrigger(sessionId: number, triggerId: number, payload: { insertion_block_id?: number | null; insertion_offset?: number | null } = {}) {
   const response = await fetch(await buildApiUrl(`/api/listen-commands/sessions/${sessionId}/triggers/${triggerId}`), {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   return parseJsonResponse<TriggerActivationRecord>(response);
 }

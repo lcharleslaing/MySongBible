@@ -27,6 +27,7 @@ import {
   type VoiceTriggerRecord,
 } from "../api/listenCommands";
 import { PageHeader } from "../components/ui/PageHeader";
+import { useAudioRecorder } from "../features/voice-lab/useAudioRecorder";
 
 type TabId = "listen" | "library" | "sessions" | "settings" | "help";
 
@@ -213,6 +214,15 @@ function buildMarkdown(session: ListeningSessionRecord) {
 }
 
 export function ListenCommandsPage() {
+  const {
+    audioBlob: descriptionAudioBlob,
+    fileName: descriptionAudioFileName,
+    isRecording: isRecordingDescription,
+    recorderError: descriptionRecorderError,
+    resetRecording: resetDescriptionRecording,
+    startRecording: startDescriptionRecording,
+    stopRecording: stopDescriptionRecording,
+  } = useAudioRecorder();
   const [activeTab, setActiveTab] = useState<TabId>("listen");
   const [triggers, setTriggers] = useState<VoiceTriggerRecord[]>([]);
   const [sessions, setSessions] = useState<ListeningSessionRecord[]>([]);
@@ -226,6 +236,8 @@ export function ListenCommandsPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isWorking, setIsWorking] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [isTranscribingDescription, setIsTranscribingDescription] = useState(false);
   const [assetUrls, setAssetUrls] = useState<Record<number, string>>({});
   const [listeningState, setListeningState] = useState<ListeningState>("Idle");
   const [pendingChunks, setPendingChunks] = useState(0);
@@ -259,12 +271,42 @@ export function ListenCommandsPage() {
   const lastSpeechAtRef = useRef(0);
   const preRollRef = useRef<Float32Array[]>([]);
   const utteranceRef = useRef<Float32Array[]>([]);
+  const insertionAnchorRef = useRef<{ blockId: number; offset: number } | null>(null);
+  const descriptionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const descriptionSelectionRef = useRef({ start: 0, end: 0 });
 
   const activeBlocks = useMemo(() => currentSession?.blocks.filter((block) => block.status !== "deleted") || [], [currentSession]);
 
   useEffect(() => {
     currentSessionRef.current = currentSession;
+    setSessionTitle(currentSession?.title || "");
   }, [currentSession]);
+
+  useEffect(() => {
+    if (!descriptionAudioBlob) {
+      return;
+    }
+    setIsTranscribingDescription(true);
+    transcribeAudioRecording({
+      audioBlob: descriptionAudioBlob,
+      fileName: descriptionAudioFileName || "command-description.webm",
+      title: "Command description dictation",
+    })
+      .then((transcript) => {
+        const spoken = transcript.transcript_text.trim();
+        if (!spoken) return;
+        const { start, end } = descriptionSelectionRef.current;
+        setTriggerForm((form) => ({
+          ...form,
+          description: `${form.description.slice(0, start)}${start > 0 && !/\s$/.test(form.description.slice(0, start)) ? " " : ""}${spoken}${end < form.description.length && !/^\s/.test(form.description.slice(end)) ? " " : ""}${form.description.slice(end)}`,
+        }));
+      })
+      .catch((nextError) => setError(errorMessage(nextError, "Could not transcribe the command description.")))
+      .finally(() => {
+        setIsTranscribingDescription(false);
+        resetDescriptionRecording();
+      });
+  }, [descriptionAudioBlob]);
 
   useEffect(() => {
     documentEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -478,11 +520,17 @@ export function ListenCommandsPage() {
   };
 
   const appendFinalizedText = async (session: ListeningSessionRecord, text: string, sourceTranscriptId: number | null) => {
+    const anchor = insertionAnchorRef.current;
     const result = await appendTranscriptSegment(session.id, {
       text,
       source: "whisper.cpp-live-chunk",
       source_transcript_id: sourceTranscriptId,
+      insertion_block_id: anchor?.blockId,
+      insertion_offset: anchor?.offset,
     });
+    if (anchor) {
+      insertionAnchorRef.current = { blockId: anchor.blockId, offset: 0 };
+    }
     syncSessionState(result.session);
   };
 
@@ -584,9 +632,10 @@ export function ListenCommandsPage() {
       setMicrophoneError("Audio recording is not available in this environment.");
       return;
     }
-    const session = currentSession && !["stopped", "finalized", "deleted"].includes(currentSession.status)
-      ? await updateListeningSession(currentSession.id, { status: "active" })
+    const session = currentSession && !["finalized", "deleted"].includes(currentSession.status)
+      ? await updateListeningSession(currentSession.id, { status: "active", title: sessionTitle.trim() || currentSession.title })
       : await createListeningSession({
+          title: sessionTitle.trim() || undefined,
           status: "active",
           settings_json: {
             trigger_detection_enabled: settings.trigger_detection_enabled,
@@ -746,6 +795,21 @@ export function ListenCommandsPage() {
     event.target.value = "";
   }, "Could not import trigger library.");
 
+  const saveSessionTitle = () => {
+    if (!currentSession || !sessionTitle.trim() || sessionTitle.trim() === currentSession.title) return;
+    run(async () => {
+      syncSessionState(await updateListeningSession(currentSession.id, { title: sessionTitle.trim() }));
+      setStatus("Session title saved.");
+    }, "Could not save the session title.");
+  };
+
+  const rememberDescriptionSelection = () => {
+    const textarea = descriptionTextareaRef.current;
+    if (textarea) {
+      descriptionSelectionRef.current = { start: textarea.selectionStart, end: textarea.selectionEnd };
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -769,6 +833,15 @@ export function ListenCommandsPage() {
         <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4">
+              <input
+                className="input input-bordered input-sm min-w-56 flex-1"
+                value={sessionTitle}
+                onChange={(event) => setSessionTitle(event.target.value)}
+                onBlur={saveSessionTitle}
+                onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                placeholder="Session title"
+                aria-label="Session title"
+              />
               <span className={`badge ${listeningState === "Listening" || listeningState === "Processing speech" ? "badge-error" : "badge-ghost"} gap-2`}>
                 {listeningState === "Listening" || listeningState === "Processing speech" ? <span className="h-2 w-2 rounded-full bg-current" /> : null}
                 {listeningState}
@@ -798,7 +871,7 @@ export function ListenCommandsPage() {
                 </div>
               </div>
               <div className="min-h-[28rem] rounded-box border border-base-300 bg-base-100 px-7 py-6 text-base leading-7 shadow-inner">
-                {activeBlocks.map((block) => <SessionBlock key={block.id} block={block} imageUrl={block.image_asset_id ? assetUrls[block.image_asset_id] : ""} onChange={(payload) => updateSessionBlock(block.id, payload).then((updated) => setCurrentSession((session) => session ? { ...session, blocks: session.blocks.map((item) => item.id === updated.id ? updated : item) } : session))} />)}
+                {activeBlocks.map((block) => <SessionBlock key={block.id} block={block} imageUrl={block.image_asset_id ? assetUrls[block.image_asset_id] : ""} onCaret={(offset) => { insertionAnchorRef.current = { blockId: block.id, offset }; }} onChange={(payload) => updateSessionBlock(block.id, payload).then((updated) => setCurrentSession((session) => session ? { ...session, blocks: session.blocks.map((item) => item.id === updated.id ? updated : item) } : session))} />)}
                 {!activeBlocks.length ? <p className="text-sm text-base-content/60">Press Start and begin speaking. Finalized speech and command blocks appear here automatically.</p> : null}
                 <div ref={documentEndRef} />
               </div>
@@ -822,7 +895,17 @@ export function ListenCommandsPage() {
               <h3 className="font-semibold">Manual insert</h3>
               <div className="mt-3 max-h-[28rem] space-y-2 overflow-auto">
                 {triggers.filter((trigger) => trigger.enabled).map((trigger) => (
-                  <button key={trigger.id} className="btn btn-outline btn-sm w-full justify-start" disabled={!currentSession} onClick={() => currentSession && manuallyInsertVoiceTrigger(currentSession.id, trigger.id).then(loadData)}>
+                  <button key={trigger.id} className="btn btn-outline btn-sm w-full justify-start" disabled={!currentSession} onClick={() => {
+                    if (!currentSession) return;
+                    const anchor = insertionAnchorRef.current;
+                    manuallyInsertVoiceTrigger(currentSession.id, trigger.id, {
+                      insertion_block_id: anchor?.blockId,
+                      insertion_offset: anchor?.offset,
+                    }).then(() => {
+                      if (anchor) insertionAnchorRef.current = { blockId: anchor.blockId, offset: 0 };
+                      return loadData();
+                    });
+                  }}>
                     {trigger.title}
                   </button>
                 ))}
@@ -870,7 +953,31 @@ export function ListenCommandsPage() {
               </select>
               <input className="input input-bordered" type="number" min="0" value={triggerForm.duplicate_cooldown_seconds} onChange={(event) => setTriggerForm({ ...triggerForm, duplicate_cooldown_seconds: event.target.value })} placeholder="Cooldown seconds" />
               <textarea className="textarea textarea-bordered min-h-24 md:col-span-2" value={triggerForm.aliases} onChange={(event) => setTriggerForm({ ...triggerForm, aliases: event.target.value })} placeholder="Aliases, one per line" />
-              <textarea className="textarea textarea-bordered min-h-32 md:col-span-2" value={triggerForm.description} onChange={(event) => setTriggerForm({ ...triggerForm, description: event.target.value })} placeholder="Description or structured content" />
+              <div className="md:col-span-2">
+                <textarea
+                  ref={descriptionTextareaRef}
+                  className="textarea textarea-bordered min-h-32 w-full"
+                  value={triggerForm.description}
+                  onChange={(event) => setTriggerForm({ ...triggerForm, description: event.target.value })}
+                  onSelect={rememberDescriptionSelection}
+                  placeholder="Description or structured content"
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${isRecordingDescription ? "btn-error" : "btn-outline"}`}
+                    disabled={isTranscribingDescription}
+                    onClick={() => {
+                      rememberDescriptionSelection();
+                      if (isRecordingDescription) stopDescriptionRecording();
+                      else startDescriptionRecording();
+                    }}
+                  >
+                    {isRecordingDescription ? "Stop dictation" : isTranscribingDescription ? "Transcribing…" : "Speak description"}
+                  </button>
+                  {descriptionRecorderError ? <span className="text-sm text-error">{descriptionRecorderError}</span> : null}
+                </div>
+              </div>
               <input className="file-input file-input-bordered md:col-span-2" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setSelectedImage(event.target.files?.[0] || null)} />
               <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="toggle toggle-sm" checked={triggerForm.enabled} onChange={(event) => setTriggerForm({ ...triggerForm, enabled: event.target.checked })} />Enabled</label>
               <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="toggle toggle-sm" checked={triggerForm.case_sensitive} onChange={(event) => setTriggerForm({ ...triggerForm, case_sensitive: event.target.checked })} />Case-sensitive</label>
@@ -1002,7 +1109,7 @@ export function ListenCommandsPage() {
   );
 }
 
-function SessionBlock({ block, imageUrl, onChange }: { block: SessionContentBlockRecord; imageUrl: string; onChange: (payload: Partial<{ title: string; content: string; status: string }>) => Promise<unknown> }) {
+function SessionBlock({ block, imageUrl, onChange, onCaret }: { block: SessionContentBlockRecord; imageUrl: string; onChange: (payload: Partial<{ title: string; content: string; status: string }>) => Promise<unknown>; onCaret: (offset: number) => void }) {
   const [title, setTitle] = useState(block.title || "");
   const [content, setContent] = useState(block.content || "");
 
@@ -1025,6 +1132,23 @@ function SessionBlock({ block, imageUrl, onChange }: { block: SessionContentBloc
     }
   };
 
+  const rememberCaret = (element: HTMLElement) => {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !element.contains(selection.anchorNode)) {
+      return;
+    }
+    const range = selection.getRangeAt(0).cloneRange();
+    range.selectNodeContents(element);
+    range.setEnd(selection.anchorNode as Node, selection.anchorOffset);
+    onCaret(range.toString().length);
+  };
+
+  const caretProps = {
+    onFocus: (event: React.FocusEvent<HTMLElement>) => rememberCaret(event.currentTarget),
+    onClick: (event: React.MouseEvent<HTMLElement>) => rememberCaret(event.currentTarget),
+    onKeyUp: (event: React.KeyboardEvent<HTMLElement>) => rememberCaret(event.currentTarget),
+  };
+
   if (block.block_type === "trigger") {
     return (
       <section className="my-5">
@@ -1040,6 +1164,7 @@ function SessionBlock({ block, imageUrl, onChange }: { block: SessionContentBloc
           className="mt-2 whitespace-pre-wrap outline-none focus:bg-base-200"
           contentEditable
           suppressContentEditableWarning
+          {...caretProps}
           onBlur={(event) => saveContent(event.currentTarget.innerText.trim())}
         >
           {content}
@@ -1055,6 +1180,7 @@ function SessionBlock({ block, imageUrl, onChange }: { block: SessionContentBloc
       className="mb-4 whitespace-pre-wrap outline-none focus:bg-base-200"
       contentEditable
       suppressContentEditableWarning
+      {...caretProps}
       onBlur={(event) => saveContent(event.currentTarget.innerText.trim())}
     >
       {content}

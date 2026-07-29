@@ -115,6 +115,8 @@ class TranscriptSegmentCreate(BaseModel):
     is_final: bool = True
     source: str = Field(default="manual", max_length=64)
     source_transcript_id: int | None = None
+    insertion_block_id: int | None = None
+    insertion_offset: int | None = Field(default=None, ge=0)
 
 
 class SessionContentBlockUpdate(BaseModel):
@@ -131,6 +133,11 @@ class ManualNoteCreate(BaseModel):
     content: str | None = None
     order_index: int | None = None
     metadata_json: dict = Field(default_factory=dict)
+
+
+class ManualTriggerInsert(BaseModel):
+    insertion_block_id: int | None = None
+    insertion_offset: int | None = Field(default=None, ge=0)
 
 
 class TriggerActivationEventRead(BaseModel):

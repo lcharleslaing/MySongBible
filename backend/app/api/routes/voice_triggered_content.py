@@ -10,6 +10,7 @@ from app.schemas.voice_triggered_content import (
     ListeningSessionRead,
     ListeningSessionUpdate,
     ManualNoteCreate,
+    ManualTriggerInsert,
     SessionContentBlockRead,
     SessionContentBlockUpdate,
     TranscriptAppendResponse,
@@ -256,10 +257,16 @@ async def update_block(
 async def manually_insert_trigger(
     session_id: int,
     trigger_id: int,
+    payload: ManualTriggerInsert,
     service: VoiceTriggeredContentService = Depends(get_service),
 ) -> TriggerActivationEventRead:
     try:
-        activation, _block = service.manual_insert_trigger(session_id, trigger_id)
+        activation, _block = service.manual_insert_trigger(
+            session_id,
+            trigger_id,
+            insertion_block_id=payload.insertion_block_id,
+            insertion_offset=payload.insertion_offset,
+        )
         return TriggerActivationEventRead.model_validate(activation)
     except VoiceTriggeredContentError as error:
         raise handle_error(error) from error

@@ -94,6 +94,50 @@ def test_command_phrase_is_replaced_inside_surrounding_speech(client) -> None:
     assert "Sample Sample" not in blocks[2]["content"]
 
 
+def test_speech_and_manual_commands_can_be_inserted_at_a_block_caret(client) -> None:
+    trigger = client.post(
+        "/api/listen-commands/triggers",
+        json={"primary_phrase": "Saved Command", "title": "Saved Command", "description": "Reusable content."},
+    ).json()
+    session = client.post("/api/listen-commands/sessions", json={"title": "Caret test", "status": "active"}).json()
+    initial = client.post(
+        f"/api/listen-commands/sessions/{session['id']}/segments",
+        json={"text": "Before after", "is_final": True, "source": "simulated"},
+    ).json()
+    target = initial["session"]["blocks"][0]
+
+    inserted_speech = client.post(
+        f"/api/listen-commands/sessions/{session['id']}/segments",
+        json={
+            "text": "middle",
+            "is_final": True,
+            "source": "simulated",
+            "insertion_block_id": target["id"],
+            "insertion_offset": 7,
+        },
+    )
+    assert inserted_speech.status_code == 201
+    assert [block["content"] for block in inserted_speech.json()["session"]["blocks"]] == [
+        "Before ",
+        "middle",
+        "after",
+    ]
+
+    inserted_command = client.post(
+        f"/api/listen-commands/sessions/{session['id']}/triggers/{trigger['id']}",
+        json={"insertion_block_id": target["id"], "insertion_offset": 0},
+    )
+    assert inserted_command.status_code == 201
+    reopened = client.get(f"/api/listen-commands/sessions/{session['id']}").json()
+    assert [block["block_type"] for block in reopened["blocks"]] == [
+        "transcript",
+        "transcript",
+        "trigger",
+        "transcript",
+    ]
+    assert reopened["blocks"][2]["content"] == "Reusable content."
+
+
 def test_snapshots_survive_trigger_edits_and_delete(client) -> None:
     trigger = client.post(
         "/api/listen-commands/triggers",
