@@ -27,7 +27,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
     event.currentTarget.setPointerCapture(event.pointerId);
 
     const resize = (moveEvent: globalThis.PointerEvent) => {
-      setWidth(Math.min(Math.max(startWidth + moveEvent.clientX - startX, 180), 420));
+      setWidth(Math.min(Math.max(startWidth + moveEvent.clientX - startX, 220), 560));
     };
     const stopResize = () => {
       window.removeEventListener("pointermove", resize);
@@ -69,12 +69,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
               {showIdentityText ? (
                 <div className="min-w-0">
                   {appDefinition.sidebar_show_eyebrow ? (
-                    <p className="truncate text-xs font-semibold uppercase tracking-[0.3em] text-base-content/60">
+                    <p className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.3em] text-base-content/60">
                       {appDefinition.sidebar_eyebrow}
                     </p>
                   ) : null}
                   {appDefinition.sidebar_show_title ? (
-                    <h1 className="mt-1 truncate text-2xl font-bold leading-tight text-base-content">{appDefinition.sidebar_title}</h1>
+                    <h1 className="mt-1 whitespace-nowrap text-2xl font-bold leading-tight text-base-content">{appDefinition.sidebar_title}</h1>
                   ) : null}
                 </div>
               ) : null}
@@ -101,7 +101,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
                 data-tip={isCollapsed ? item.label : undefined}
               >
                 <AppIcon name={item.icon} className="h-5 w-5 shrink-0" />
-                {isCollapsed ? <span className="sr-only">{item.label}</span> : <span className="truncate">{item.label}</span>}
+                {isCollapsed ? <span className="sr-only">{item.label}</span> : <span className="whitespace-nowrap">{item.label}</span>}
               </NavLink>
             </li>
           ))}

@@ -5,44 +5,43 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
 const sidebarWidthKey = "app-template-sidebar-width";
-const sidebarWidthModeKey = "app-template-sidebar-width-mode";
 const sidebarCollapsedKey = "app-template-sidebar-collapsed";
 const collapsedSidebarWidth = 72;
-const minExpandedSidebarWidth = 180;
-const maxExpandedSidebarWidth = 420;
+const minExpandedSidebarWidth = 220;
+const maxExpandedSidebarWidth = 560;
 
-function estimateTextWidth(value: string, averageCharacterWidth: number, letterSpacing = 0) {
+function measureTextWidth(value: string, font: string, letterSpacing = 0) {
   const text = value.trim();
   if (!text) {
     return 0;
   }
-  return text.length * averageCharacterWidth + Math.max(text.length - 1, 0) * letterSpacing;
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return text.length * 10 + Math.max(text.length - 1, 0) * letterSpacing;
+  }
+
+  context.font = font;
+  return context.measureText(text).width + Math.max(text.length - 1, 0) * letterSpacing;
 }
 
 export function AppLayout() {
   const { appDefinition, homePage } = useAppDefinition();
   const navLabels = useMemo(() => ["Home", ...homePage.apps.map((app) => app.label)], [homePage.apps]);
   const automaticSidebarWidth = useMemo(() => {
-    const navTextWidth = Math.max(...navLabels.map((label) => estimateTextWidth(label, 8.5)), 0);
+    const navTextWidth = Math.max(...navLabels.map((label) => measureTextWidth(label, "14px sans-serif")), 0);
     const identityTextWidths = [
-      appDefinition.sidebar_show_eyebrow ? estimateTextWidth(appDefinition.sidebar_eyebrow, 7.2, 3.6) : 0,
-      appDefinition.sidebar_show_title ? estimateTextWidth(appDefinition.sidebar_title, 13) : 0,
-      appDefinition.sidebar_show_description ? estimateTextWidth(appDefinition.sidebar_description, 7.2) : 0,
+      appDefinition.sidebar_show_eyebrow ? measureTextWidth(appDefinition.sidebar_eyebrow.toUpperCase(), "600 12px sans-serif", 3.6) : 0,
+      appDefinition.sidebar_show_title ? measureTextWidth(appDefinition.sidebar_title, "700 24px sans-serif") : 0,
+      appDefinition.sidebar_show_description ? measureTextWidth(appDefinition.sidebar_description, "14px sans-serif") : 0,
     ];
-    const navWidth = navTextWidth + 92;
-    const identityWidth = Math.max(...identityTextWidths, 0) + (appDefinition.sidebar_show_icon ? 136 : 80);
+    const navWidth = navTextWidth + 88;
+    const identityWidth = Math.max(...identityTextWidths, 0) + (appDefinition.sidebar_show_icon ? 128 : 96);
     const rawWidth = Math.ceil(Math.max(navWidth, identityWidth));
     return Math.min(Math.max(rawWidth, minExpandedSidebarWidth), maxExpandedSidebarWidth);
   }, [appDefinition, navLabels]);
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    if (window.localStorage.getItem(sidebarWidthModeKey) !== "manual") {
-      return null;
-    }
-    const saved = Number(window.localStorage.getItem(sidebarWidthKey));
-    return Number.isFinite(saved)
-      ? Math.min(Math.max(saved, minExpandedSidebarWidth), maxExpandedSidebarWidth)
-      : null;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.localStorage.getItem(sidebarCollapsedKey) === "true");
   const expandedSidebarWidth = sidebarWidth ?? automaticSidebarWidth;
   const layoutWidth = isSidebarCollapsed ? collapsedSidebarWidth : expandedSidebarWidth;
@@ -50,7 +49,6 @@ export function AppLayout() {
   useEffect(() => {
     if (sidebarWidth !== null) {
       window.localStorage.setItem(sidebarWidthKey, String(sidebarWidth));
-      window.localStorage.setItem(sidebarWidthModeKey, "manual");
     }
   }, [sidebarWidth]);
 
@@ -72,10 +70,14 @@ export function AppLayout() {
       </div>
       <Sidebar
         isCollapsed={isSidebarCollapsed}
-        setIsCollapsed={setIsSidebarCollapsed}
+        setIsCollapsed={(value) => {
+          if (isSidebarCollapsed && !value) {
+            setSidebarWidth(null);
+          }
+          setIsSidebarCollapsed(value);
+        }}
         width={expandedSidebarWidth}
         setWidth={(value) => {
-          window.localStorage.setItem(sidebarWidthModeKey, "manual");
           setSidebarWidth(value);
         }}
       />
