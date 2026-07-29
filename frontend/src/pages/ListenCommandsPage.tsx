@@ -28,7 +28,7 @@ import {
 import { PageHeader } from "../components/ui/PageHeader";
 import { useAudioRecorder } from "../features/voice-lab/useAudioRecorder";
 
-type TabId = "listen" | "library" | "sessions" | "settings";
+type TabId = "listen" | "library" | "sessions" | "settings" | "help";
 
 type TriggerForm = {
   primary_phrase: string;
@@ -303,7 +303,7 @@ export function ListenCommandsPage() {
       {status ? <div className="alert alert-success text-sm">{status}</div> : null}
 
       <div className="tabs tabs-boxed w-fit">
-        {(["listen", "library", "sessions", "settings"] as TabId[]).map((tab) => (
+        {(["listen", "library", "sessions", "settings", "help"] as TabId[]).map((tab) => (
           <button key={tab} type="button" className={`tab capitalize ${activeTab === tab ? "tab-active" : ""}`} onClick={() => setActiveTab(tab)}>
             {tab}
           </button>
@@ -467,6 +467,71 @@ export function ListenCommandsPage() {
             <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="toggle" checked={settings.images_expanded} onChange={(event) => setSettings({ ...settings, images_expanded: event.target.checked })} />Expanded images</label>
             <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="toggle" checked={settings.show_timestamps} onChange={(event) => setSettings({ ...settings, show_timestamps: event.target.checked })} />Show timestamps</label>
             <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="toggle" checked={settings.automatic_save} onChange={(event) => setSettings({ ...settings, automatic_save: event.target.checked })} />Automatic save</label>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "help" ? (
+        <section className="space-y-4">
+          <div className="rounded-box border border-base-300 bg-base-100 p-5">
+            <h2 className="text-xl font-semibold">Quick Start</h2>
+            <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-6 text-base-content/80">
+              <li>Open the Library tab and create at least one command.</li>
+              <li>Enter the phrase you expect to say in Primary phrase.</li>
+              <li>Add alternate phrases in Aliases when speech-to-text often hears the command another way.</li>
+              <li>Add the title, content, category, tags, and optional image that should be inserted when the command is detected.</li>
+              <li>Save the command, then return to the Listen tab.</li>
+              <li>Press Start to create a listening session and activate the microphone.</li>
+              <li>Press Stop when you finish speaking, then use Transcribe and save to send the recorded audio through the existing local STT backend.</li>
+              <li>Review the saved transcript and inserted command blocks in the session workspace.</li>
+              <li>Edit or remove blocks as needed, add notes, then save or export the session.</li>
+            </ol>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-box border border-base-300 bg-base-100 p-5">
+              <h3 className="font-semibold">Library Tab</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-base-content/80">
+                <li>Use New to create a command.</li>
+                <li>Use whole phrase matching for normal spoken commands.</li>
+                <li>Use exact phrase when the whole transcript segment should equal the command.</li>
+                <li>Use flexible match for minor punctuation or spacing differences.</li>
+                <li>Disable a command when you want to keep it saved but stop detecting it.</li>
+                <li>Deleting a command does not rewrite older sessions that already used it.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-box border border-base-300 bg-base-100 p-5">
+              <h3 className="font-semibold">Listen Tab</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-base-content/80">
+                <li>Start creates a new active session and turns on the microphone.</li>
+                <li>Pause and Resume control the active recording.</li>
+                <li>Stop turns off the microphone and leaves the recording ready to transcribe.</li>
+                <li>Transcribe and save stores the final transcript segment and any command activations in SQLite.</li>
+                <li>The manual transcript box is useful for testing commands without using the microphone.</li>
+                <li>Manual insert adds a saved command block even when speech recognition missed it.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-box border border-base-300 bg-base-100 p-5">
+              <h3 className="font-semibold">Sessions Tab</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-base-content/80">
+                <li>Open a previous session to continue reviewing or editing it.</li>
+                <li>Draft and active sessions remain available after restart.</li>
+                <li>Triggered blocks keep the title, content, image reference, spoken phrase, and match mode from the moment they were detected.</li>
+                <li>Export the current session from the Listen tab as Markdown or JSON.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-box border border-base-300 bg-base-100 p-5">
+              <h3 className="font-semibold">Settings Tab</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-base-content/80">
+                <li>Duplicate cooldown prevents the same command from firing repeatedly from overlapping transcript results.</li>
+                <li>Trigger detection can be turned off for sessions where you only want transcription.</li>
+                <li>Timestamp visibility controls whether session blocks show saved times.</li>
+                <li>Images are stored in the application runtime data directory, not in the source tree.</li>
+              </ul>
+            </div>
           </div>
         </section>
       ) : null}
