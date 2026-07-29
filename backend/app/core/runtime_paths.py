@@ -53,11 +53,15 @@ class RuntimePaths:
     def generated(self) -> Path:
         return self.root / "generated"
 
+    @property
+    def voice_trigger_images(self) -> Path:
+        return self.root / "listen-commands" / "images"
+
     def create(self) -> None:
         for directory in (
             self.root, self.database, self.logs, self.audio_originals,
             self.audio_generated, self.transcripts, self.settings,
-            self.profiles, self.generated,
+            self.profiles, self.generated, self.voice_trigger_images,
         ):
             directory.mkdir(parents=True, exist_ok=True, mode=0o700)
 

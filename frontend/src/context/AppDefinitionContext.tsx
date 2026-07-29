@@ -32,6 +32,7 @@ export const defaultHomePageSettings: HomePageSettingsRecord = {
   marketing_description: "A private, local-first workspace that brings your everyday tools together without getting in the way.",
   apps: [
     { id: "audio-journal", label: "Audio Journal", description: "Record, review, and organize spoken notes.", path: "/audio-journal", badge: "Capture", icon: "mic" },
+    { id: "listen-commands", label: "Listen Commands", description: "Log content blocks from local voice commands.", path: "/listen-commands", badge: "Listen", icon: "spark" },
     { id: "settings", label: "Settings", description: "Personalize the app and configure this device.", path: "/settings", badge: "Configure", icon: "settings" },
     { id: "system-health", label: "System Health", description: "Check local services and runtime readiness.", path: "/system-health", badge: "Monitor", icon: "activity" },
   ],

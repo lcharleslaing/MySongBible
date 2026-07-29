@@ -7,6 +7,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { SystemHealthPage } from "./pages/SystemHealthPage";
 import { LocalAiSetupPage } from "./pages/LocalAiSetupPage";
 import { AppClonerPage } from "./pages/AppClonerPage";
+import { ListenCommandsPage } from "./pages/ListenCommandsPage";
 import { AppDefinitionProvider } from "./context/AppDefinitionContext";
 import { AppLockGate } from "./components/app-lock/AppLockGate";
 
@@ -17,6 +18,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/audio-journal" element={<AudioJournalPage />} />
+          <Route path="/listen-commands" element={<ListenCommandsPage />} />
           <Route path="/voice-lab" element={<VoiceLabPage />} />
           <Route path="/local-ai-setup" element={<LocalAiSetupPage />} />
           <Route path="/clone-app" element={<AppClonerPage />} />

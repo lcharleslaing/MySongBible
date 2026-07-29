@@ -15,6 +15,7 @@ from app.schemas.settings import (
     AppDefinitionUpdateRequest,
     DeviceProfileApplyRequest,
     DeviceSettingsProfile,
+    HomeApp,
     PublicSettingsResponse,
     HomePageSettings,
     HomePageSettingsUpdateRequest,
@@ -67,6 +68,7 @@ HOME_PAGE_DEFAULTS = {
     "marketing_description": "A private, local-first workspace that brings your everyday tools together without getting in the way.",
     "apps": [
         {"id": "audio-journal", "label": "Audio Journal", "description": "Record, review, and organize spoken notes.", "path": "/audio-journal", "badge": "Capture", "icon": "mic"},
+        {"id": "listen-commands", "label": "Listen Commands", "description": "Log content blocks from local voice commands.", "path": "/listen-commands", "badge": "Listen", "icon": "spark"},
         {"id": "settings", "label": "Settings", "description": "Personalize the app and configure this device.", "path": "/settings", "badge": "Configure", "icon": "settings"},
         {"id": "system-health", "label": "System Health", "description": "Check local services and runtime readiness.", "path": "/system-health", "badge": "Monitor", "icon": "activity"},
     ],
@@ -235,10 +237,20 @@ class SettingsService:
         raw_value = overrides.get("home_page")
         if raw_value:
             try:
-                return HomePageSettings.model_validate_json(raw_value)
+                settings = HomePageSettings.model_validate_json(raw_value)
+                return settings.model_copy(update={"apps": self._merge_default_apps(settings.apps)})
             except ValueError:
                 pass
         return HomePageSettings(**HOME_PAGE_DEFAULTS)
+
+    @staticmethod
+    def _merge_default_apps(apps: list[HomeApp]) -> list[HomeApp]:
+        existing_ids = {app.id for app in apps}
+        merged = list(apps)
+        for default_app in HOME_PAGE_DEFAULTS["apps"]:
+            if default_app["id"] not in existing_ids:
+                merged.append(HomeApp(**default_app))
+        return merged
 
     def _get_device_profiles(self, overrides: dict[str, str]) -> list[DeviceSettingsProfile]:
         raw_profiles = self._read_device_profile_file()

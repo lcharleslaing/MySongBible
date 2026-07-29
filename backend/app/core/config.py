@@ -167,6 +167,10 @@ class Settings(BaseSettings):
     def voice_dataset_exports_dir(self) -> Path:
         return self.app_data_dir / "exports" / "voice-datasets"
 
+    @property
+    def voice_trigger_image_dir(self) -> Path:
+        return self.app_data_dir / "listen-commands" / "images"
+
     def model_post_init(self, __context: object) -> None:
         self.app_data_dir = self.app_data_dir.expanduser().resolve()
         if not self.database_url:
