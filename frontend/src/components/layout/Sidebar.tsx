@@ -39,10 +39,10 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
   };
 
   return (
-    <div className="drawer-side z-50 overflow-visible">
+    <div className="drawer-side z-[200] !overflow-visible">
       <label htmlFor="app-sidebar" aria-label="close sidebar" className="drawer-overlay" />
       <aside
-        className={`relative flex min-h-full flex-col overflow-visible border-r border-base-300 bg-base-100 transition-[width] duration-150 ${isCollapsed ? "items-center" : ""}`}
+        className={`relative z-[200] flex min-h-full flex-col !overflow-visible border-r border-base-300 bg-base-100 transition-[width] duration-150 ${isCollapsed ? "items-center" : ""}`}
         style={{ width: isCollapsed ? 72 : width }}
       >
         <button
@@ -87,22 +87,26 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
           </div>
         ) : null}
 
-        <ul className={`menu w-full gap-2 overflow-visible ${isCollapsed ? "items-center px-2 py-4" : "p-4"}`}>
+        <ul className={`menu w-full gap-2 !overflow-visible ${isCollapsed ? "items-center px-2 py-4" : "p-4"}`}>
           {navItems.map((item) => (
-            <li key={item.to} className={isCollapsed ? "relative z-50 flex w-full items-center justify-center overflow-visible" : undefined}>
+            <li key={item.to} className={isCollapsed ? "group relative z-[300] flex w-full items-center justify-center !overflow-visible" : undefined}>
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
                 title={isCollapsed ? item.label : undefined}
                 aria-label={isCollapsed ? item.label : undefined}
                 className={({ isActive }) => isCollapsed
-                  ? `tooltip tooltip-right !z-50 !flex !h-11 !min-h-11 !w-11 !items-center !justify-center !overflow-visible !rounded-box !p-0 before:!z-50 after:!z-50 ${isActive ? "active" : ""}`
+                  ? `!flex !h-11 !min-h-11 !w-11 !items-center !justify-center !overflow-visible !rounded-box !p-0 ${isActive ? "active" : ""}`
                   : isActive ? "active" : ""}
-                data-tip={isCollapsed ? item.label : undefined}
               >
                 <AppIcon name={item.icon} className="h-5 w-5 shrink-0" />
                 {isCollapsed ? <span className="sr-only">{item.label}</span> : <span className="whitespace-nowrap">{item.label}</span>}
               </NavLink>
+              {isCollapsed ? (
+                <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-[9999] -translate-y-1/2 whitespace-nowrap rounded bg-neutral px-2 py-1 text-sm font-medium text-neutral-content opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  {item.label}
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>
