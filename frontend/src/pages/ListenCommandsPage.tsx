@@ -47,6 +47,14 @@ type TriggerForm = {
 
 type ListeningState = "Idle" | "Starting" | "Listening" | "Processing speech" | "Paused" | "Stopped" | "Microphone unavailable" | "Speech service unavailable";
 
+type ConfirmDialog = {
+  title: string;
+  body: string;
+  actionLabel: string;
+  actionClass: string;
+  onConfirm: () => Promise<void>;
+};
+
 const silenceFinalizeMs = 950;
 const maxUtteranceMs = 12000;
 const preRollMs = 300;
@@ -222,6 +230,7 @@ export function ListenCommandsPage() {
   const [pendingChunks, setPendingChunks] = useState(0);
   const [microphoneError, setMicrophoneError] = useState("");
   const [speechError, setSpeechError] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [settings, setSettings] = useState({
     duplicate_cooldown_seconds: 4,
     keep_trigger_words: true,
@@ -590,34 +599,77 @@ export function ListenCommandsPage() {
     }
   }, "Could not save session.");
 
-  const discardSession = () => run(async () => {
-    if (!currentSession || !window.confirm("Discard this session?")) {
+  const discardSession = () => {
+    if (!currentSession) {
       return;
     }
-    await stopAudioPipeline({ flush: false });
-    retainedTranscriptRef.current = "";
-    await deleteListeningSession(currentSession.id);
-    setCurrentSession(null);
-    currentSessionRef.current = null;
-    setListeningState("Idle");
-    await loadData();
-    setStatus("Session discarded.");
-  }, "Could not discard session.");
+    const session = currentSession;
+    setConfirmDialog({
+      title: "Discard session",
+      body: `Delete "${session.title}"? This removes the session document, transcript segments, and command activation history.`,
+      actionLabel: "Discard",
+      actionClass: "btn-error",
+      onConfirm: async () => {
+        await stopAudioPipeline({ flush: false });
+        retainedTranscriptRef.current = "";
+        await deleteListeningSession(session.id);
+        setCurrentSession(null);
+        currentSessionRef.current = null;
+        setListeningState("Idle");
+        await loadData();
+        setStatus("Session discarded.");
+      },
+    });
+  };
 
-  const deleteSessionFromList = (session: ListeningSessionRecord) => run(async () => {
-    if (!window.confirm(`Delete "${session.title}"? This removes the session document, transcript segments, and command activation history.`)) {
+  const deleteSessionFromList = (session: ListeningSessionRecord) => {
+    setConfirmDialog({
+      title: "Delete session",
+      body: `Delete "${session.title}"? This removes the session document, transcript segments, and command activation history.`,
+      actionLabel: "Delete session",
+      actionClass: "btn-error",
+      onConfirm: async () => {
+        if (currentSession?.id === session.id) {
+          await stopAudioPipeline({ flush: false });
+          setCurrentSession(null);
+          currentSessionRef.current = null;
+          setListeningState("Idle");
+        }
+        await deleteListeningSession(session.id);
+        await loadData();
+        setStatus("Session deleted.");
+      },
+    });
+  };
+
+  const deleteCurrentTrigger = () => {
+    if (!editingTrigger) {
       return;
     }
-    if (currentSession?.id === session.id) {
-      await stopAudioPipeline({ flush: false });
-      setCurrentSession(null);
-      currentSessionRef.current = null;
-      setListeningState("Idle");
+    const trigger = editingTrigger;
+    setConfirmDialog({
+      title: "Delete command",
+      body: `Delete "${trigger.title}"? Historical sessions keep their saved snapshots.`,
+      actionLabel: "Delete command",
+      actionClass: "btn-error",
+      onConfirm: async () => {
+        await deleteVoiceTrigger(trigger.id);
+        setEditingTrigger(null);
+        setTriggerForm(blankTriggerForm);
+        await loadData();
+        setStatus("Command deleted.");
+      },
+    });
+  };
+
+  const confirmAction = () => {
+    if (!confirmDialog) {
+      return;
     }
-    await deleteListeningSession(session.id);
-    await loadData();
-    setStatus("Session deleted.");
-  }, "Could not delete session.");
+    const action = confirmDialog.onConfirm;
+    setConfirmDialog(null);
+    run(action, "Could not complete action.");
+  };
 
   const saveTrigger = () => run(async () => {
     const saved = editingTrigger
@@ -792,7 +844,7 @@ export function ListenCommandsPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <button className="btn btn-primary btn-sm" disabled={isWorking || !triggerForm.primary_phrase.trim()} onClick={saveTrigger}>Save trigger</button>
               {editingTrigger ? <button className="btn btn-ghost btn-sm" onClick={() => run(async () => { await duplicateVoiceTrigger(editingTrigger.id); await loadData(); }, "Could not duplicate trigger.")}>Duplicate</button> : null}
-              {editingTrigger ? <button className="btn btn-error btn-outline btn-sm" onClick={() => window.confirm("Delete this trigger? Historical sessions keep their snapshots.") && run(async () => { await deleteVoiceTrigger(editingTrigger.id); setEditingTrigger(null); setTriggerForm(blankTriggerForm); await loadData(); }, "Could not delete trigger.")}>Delete</button> : null}
+              {editingTrigger ? <button className="btn btn-error btn-outline btn-sm" onClick={deleteCurrentTrigger}>Delete</button> : null}
               <button className="btn btn-ghost btn-sm" onClick={() => run(async () => { const payload = await exportVoiceTriggers(); const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = "voice-trigger-library.json"; link.click(); URL.revokeObjectURL(url); }, "Could not export triggers.")}>Export library</button>
               <label className="btn btn-ghost btn-sm">Import<input type="file" accept="application/json" className="hidden" onChange={importFile} /></label>
             </div>
@@ -897,6 +949,20 @@ export function ListenCommandsPage() {
           </div>
         </section>
       ) : null}
+
+      <div className={`modal ${confirmDialog ? "modal-open" : ""}`} role="dialog" aria-modal={confirmDialog ? "true" : undefined}>
+        <div className="modal-box max-w-lg rounded-box">
+          <h3 className="text-lg font-semibold">{confirmDialog?.title}</h3>
+          <p className="mt-3 text-sm leading-6 text-base-content/70">{confirmDialog?.body}</p>
+          <div className="modal-action">
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmDialog(null)}>Cancel</button>
+            <button type="button" className={`btn ${confirmDialog?.actionClass || "btn-error"}`} onClick={confirmAction} disabled={isWorking}>
+              {confirmDialog?.actionLabel || "Delete"}
+            </button>
+          </div>
+        </div>
+        <button type="button" className="modal-backdrop" aria-label="Close confirmation dialog" onClick={() => setConfirmDialog(null)}>close</button>
+      </div>
     </div>
   );
 }

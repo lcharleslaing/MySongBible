@@ -43,10 +43,17 @@ function normalizeAppDefinition(definition: AppDefinitionRecord): AppDefinitionR
 }
 
 function normalizeHomePage(settings: HomePageSettingsRecord): HomePageSettingsRecord {
+  const appsById = new Map(settings.apps.map((app) => [app.id, { ...app, icon: app.icon || "briefcase" }]));
+  for (const app of defaultHomePageSettings.apps) {
+    if (!appsById.has(app.id)) {
+      appsById.set(app.id, app);
+    }
+  }
+
   return {
     ...defaultHomePageSettings,
     ...settings,
-    apps: settings.apps.map((app) => ({ ...app, icon: app.icon || "briefcase" })),
+    apps: Array.from(appsById.values()),
   };
 }
 
@@ -76,13 +83,17 @@ export function AppDefinitionProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setNormalizedHomePage = (settings: HomePageSettingsRecord) => {
+    setHomePage(normalizeHomePage(settings));
+  };
+
   const value = useMemo(
     () => ({
       appDefinition,
       homePage,
       refreshAppDefinition,
       setAppDefinition,
-      setHomePage,
+      setHomePage: setNormalizedHomePage,
     }),
     [appDefinition, homePage],
   );

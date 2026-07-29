@@ -41,8 +41,14 @@ def test_home_page_settings_can_be_updated(client) -> None:
     response = client.put("/api/settings/home-page", json=payload)
 
     assert response.status_code == 200
-    assert response.json()["home_page"] == payload
-    assert client.get("/api/settings").json()["home_page"] == payload
+    saved_home_page = response.json()["home_page"]
+    assert saved_home_page["show_marketing_on_startup"] == payload["show_marketing_on_startup"]
+    assert any(app["id"] == "settings" and app["label"] == "Preferences" for app in saved_home_page["apps"])
+    assert any(app["id"] == "listen-commands" for app in saved_home_page["apps"])
+
+    reloaded_home_page = client.get("/api/settings").json()["home_page"]
+    assert any(app["id"] == "settings" and app["label"] == "Preferences" for app in reloaded_home_page["apps"])
+    assert any(app["id"] == "listen-commands" for app in reloaded_home_page["apps"])
 
 
 def test_settings_loads_csv_list_values_from_env_file(tmp_path) -> None:
