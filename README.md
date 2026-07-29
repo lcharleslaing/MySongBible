@@ -54,8 +54,8 @@ From the repository root:
 - `npm run setup:piper` creates a dedicated Piper virtualenv, wrapper, and default voice model
 - `npm run check:local-ai` validates STT, TTS, and backend health when available
 - `npm run stt:check` validates the configured Whisper binary/model
-- `npm run frontend:dev` runs the Vite renderer only
-- `npm run electron:dev` runs Electron against the Vite dev server
+- `npm run frontend:dev` runs the Vite renderer only; Vite picks another local port if `5173` is busy
+- `npm run electron:dev` runs Electron against `ELECTRON_RENDERER_URL`; use `npm run app:dev` or `npm start` for automatic port allocation
 - `npm run tts:check` validates the Piper paths in `backend/.env` and runs a short synthesis test when Piper is configured
 - `npm run build` builds the renderer bundle used by Electron production mode
 - `npm run typecheck` runs the frontend TypeScript check

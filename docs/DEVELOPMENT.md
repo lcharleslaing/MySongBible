@@ -57,13 +57,23 @@ Checks and installs local prerequisites without launching the app.
 npm run frontend:dev
 ```
 
+When no explicit `VITE_DEV_SERVER_PORT` is set, Vite starts at `5173` and picks another open local port if needed.
+
+### Full Desktop App
+
+```bash
+npm run app:dev
+```
+
+The full dev stack allocates open frontend and backend ports automatically. Override the search windows with `APP_TEMPLATE_FRONTEND_PORT_MIN`, `APP_TEMPLATE_FRONTEND_PORT_MAX`, `APP_TEMPLATE_BACKEND_PORT_MIN`, and `APP_TEMPLATE_BACKEND_PORT_MAX`.
+
 ### Electron Only
 
 ```bash
 npm run electron:dev
 ```
 
-This expects the Vite dev server to be reachable on `127.0.0.1:5173`.
+This expects `ELECTRON_RENDERER_URL` to point at a running Vite dev server. Prefer `npm run app:dev` unless you are intentionally managing the renderer separately.
 
 ### Backend Only
 

@@ -26,14 +26,13 @@ npm run electron:smoke
 ## Manual Launch Checks
 
 ```bash
-npm run frontend:dev
-cd backend && .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
-npm run electron:dev
+npm run app:dev
 ```
 
 Confirm:
 
-- `GET http://127.0.0.1:8000/api/health` returns `{"status":"ok"}`
+- The dev log prints the allocated renderer and backend URLs
+- `GET <allocated backend URL>/api/health` returns `{"status":"ok"}`
 - Settings loads and saves editable voice/audio settings
 - SQLite database path is displayed read-only
 - no generated runtime files are staged for Git
