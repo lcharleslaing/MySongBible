@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError } from "../api/client";
 import { transcribeAudioRecording } from "../api/stt";
@@ -26,7 +26,6 @@ import {
   type VoiceTriggerRecord,
 } from "../api/listenCommands";
 import { PageHeader } from "../components/ui/PageHeader";
-import { useAudioRecorder } from "../features/voice-lab/useAudioRecorder";
 
 type TabId = "listen" | "library" | "sessions" | "settings" | "help";
 
@@ -45,6 +44,16 @@ type TriggerForm = {
   duplicate_cooldown_seconds: string;
 };
 
+type ListeningState = "Idle" | "Starting" | "Listening" | "Processing speech" | "Paused" | "Stopped" | "Microphone unavailable" | "Speech service unavailable";
+
+const liveChunkMs = 3000;
+const preferredMimeTypes = [
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+  "audio/webm;codecs=opus",
+  "audio/webm",
+] as const;
+
 const blankTriggerForm: TriggerForm = {
   primary_phrase: "",
   aliases: "",
@@ -59,6 +68,30 @@ const blankTriggerForm: TriggerForm = {
   enabled: true,
   duplicate_cooldown_seconds: "",
 };
+
+function getSupportedMimeType() {
+  if (typeof MediaRecorder === "undefined") {
+    return "";
+  }
+
+  return preferredMimeTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || "";
+}
+
+function guessFileExtension(mimeType: string) {
+  if (mimeType.includes("ogg")) {
+    return "ogg";
+  }
+
+  if (mimeType.includes("webm")) {
+    return "webm";
+  }
+
+  if (mimeType.includes("wav")) {
+    return "wav";
+  }
+
+  return "bin";
+}
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
@@ -125,7 +158,6 @@ function buildMarkdown(session: ListeningSessionRecord) {
 }
 
 export function ListenCommandsPage() {
-  const recorder = useAudioRecorder();
   const [activeTab, setActiveTab] = useState<TabId>("listen");
   const [triggers, setTriggers] = useState<VoiceTriggerRecord[]>([]);
   const [sessions, setSessions] = useState<ListeningSessionRecord[]>([]);
@@ -134,13 +166,17 @@ export function ListenCommandsPage() {
   const [editingTrigger, setEditingTrigger] = useState<VoiceTriggerRecord | null>(null);
   const [triggerForm, setTriggerForm] = useState<TriggerForm>(blankTriggerForm);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [manualText, setManualText] = useState("");
   const [noteText, setNoteText] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   const [assetUrls, setAssetUrls] = useState<Record<number, string>>({});
+  const [listeningState, setListeningState] = useState<ListeningState>("Idle");
+  const [pendingChunks, setPendingChunks] = useState(0);
+  const [lastTranscript, setLastTranscript] = useState("");
+  const [microphoneError, setMicrophoneError] = useState("");
+  const [speechError, setSpeechError] = useState("");
   const [settings, setSettings] = useState({
     duplicate_cooldown_seconds: 4,
     keep_trigger_words: true,
@@ -150,9 +186,32 @@ export function ListenCommandsPage() {
     automatic_save: true,
     strict_matching: false,
   });
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const chunkQueueRef = useRef<Blob[]>([]);
+  const isProcessingRef = useRef(false);
+  const currentSessionRef = useRef<ListeningSessionRecord | null>(null);
+  const chunkIndexRef = useRef(0);
+  const mimeTypeRef = useRef("");
+  const documentEndRef = useRef<HTMLDivElement | null>(null);
+  const retainedTranscriptRef = useRef("");
 
-  const listeningState = recorder.recorderError ? "Microphone unavailable" : recorder.isRecording ? (recorder.isPaused ? "Paused" : "Listening") : currentSession?.status === "stopped" ? "Stopped" : "Idle";
   const activeBlocks = useMemo(() => currentSession?.blocks.filter((block) => block.status !== "deleted") || [], [currentSession]);
+
+  useEffect(() => {
+    currentSessionRef.current = currentSession;
+  }, [currentSession]);
+
+  useEffect(() => {
+    documentEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activeBlocks.length]);
+
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   const loadData = async () => {
     const [triggerResponse, sessionResponse, incompleteResponse] = await Promise.all([
@@ -199,7 +258,112 @@ export function ListenCommandsPage() {
     }
   };
 
+  const enqueueChunk = (chunk: Blob) => {
+    if (!chunk.size) {
+      return;
+    }
+    chunkQueueRef.current.push(chunk);
+    setPendingChunks(chunkQueueRef.current.length + (isProcessingRef.current ? 1 : 0));
+    processChunkQueue();
+  };
+
+  const splitWithRetainedTail = (text: string, force = false) => {
+    const combined = [retainedTranscriptRef.current, text].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    if (!combined) {
+      return "";
+    }
+    if (force) {
+      retainedTranscriptRef.current = "";
+      return combined;
+    }
+    const words = combined.split(/\s+/);
+    if (words.length <= 4) {
+      retainedTranscriptRef.current = combined;
+      return "";
+    }
+    retainedTranscriptRef.current = words.slice(-4).join(" ");
+    return words.slice(0, -4).join(" ");
+  };
+
+  const appendFinalizedText = async (session: ListeningSessionRecord, text: string, sourceTranscriptId: number | null) => {
+    const result = await appendTranscriptSegment(session.id, {
+      text,
+      source: "whisper.cpp-live-chunk",
+      source_transcript_id: sourceTranscriptId,
+    });
+    currentSessionRef.current = result.session;
+    setCurrentSession(result.session);
+    setLastTranscript(text);
+  };
+
+  const processChunkQueue = async () => {
+    if (isProcessingRef.current) {
+      return;
+    }
+    isProcessingRef.current = true;
+    while (chunkQueueRef.current.length) {
+      const chunk = chunkQueueRef.current.shift();
+      if (!chunk) {
+        continue;
+      }
+      setPendingChunks(chunkQueueRef.current.length + 1);
+      const session = currentSessionRef.current;
+      if (!session) {
+        continue;
+      }
+      try {
+        setListeningState((state) => state === "Paused" || state === "Stopped" ? state : "Processing speech");
+        const chunkMimeType = chunk.type || mimeTypeRef.current || "audio/webm";
+        const transcript = await transcribeAudioRecording({
+          audioBlob: chunk,
+          fileName: `listen-commands-${session.id}-${chunkIndexRef.current++}.${guessFileExtension(chunkMimeType)}`,
+          title: `${session.title} live chunk`,
+        });
+        const text = transcript.transcript_text.trim();
+        const committableText = splitWithRetainedTail(text);
+        if (committableText) {
+          await appendFinalizedText(session, committableText, transcript.id);
+        }
+        if (mediaRecorderRef.current?.state === "recording") {
+          setListeningState("Listening");
+        }
+      } catch (nextError) {
+        setSpeechError(errorMessage(nextError, "Speech service unavailable."));
+        setListeningState("Speech service unavailable");
+      } finally {
+        setPendingChunks(chunkQueueRef.current.length);
+      }
+    }
+    isProcessingRef.current = false;
+    if (chunkQueueRef.current.length) {
+      processChunkQueue();
+    }
+  };
+
+  const waitForSpeechQueue = async () => {
+    while (isProcessingRef.current || chunkQueueRef.current.length) {
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+    }
+  };
+
+  const flushRetainedTranscript = async () => {
+    const session = currentSessionRef.current;
+    const finalText = splitWithRetainedTail("", true);
+    if (session && finalText) {
+      await appendFinalizedText(session, finalText, null);
+    }
+  };
+
   const startSession = () => run(async () => {
+    setMicrophoneError("");
+    setSpeechError("");
+    setListeningState("Starting");
+    retainedTranscriptRef.current = "";
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setListeningState("Microphone unavailable");
+      setMicrophoneError("Audio recording is not available in this environment.");
+      return;
+    }
     const session = await createListeningSession({
       status: "active",
       settings_json: {
@@ -209,46 +373,91 @@ export function ListenCommandsPage() {
       },
     });
     setCurrentSession(session);
-    await recorder.startRecording();
-    setStatus("Listening started.");
+    currentSessionRef.current = session;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const supportedMimeType = getSupportedMimeType();
+    const recorder = supportedMimeType ? new MediaRecorder(stream, { mimeType: supportedMimeType }) : new MediaRecorder(stream);
+    mediaStreamRef.current = stream;
+    mediaRecorderRef.current = recorder;
+    mimeTypeRef.current = recorder.mimeType || supportedMimeType || "audio/webm";
+    recorder.ondataavailable = (event) => enqueueChunk(event.data);
+    recorder.onerror = () => {
+      setMicrophoneError("Recording failed. Check microphone permissions and try again.");
+      setListeningState("Microphone unavailable");
+    };
+    recorder.onstop = () => {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      processChunkQueue();
+    };
+    recorder.start(liveChunkMs);
+    setListeningState("Listening");
+    setStatus("Listening live. Speech is transcribed and saved automatically.");
   }, "Could not start listening.");
 
   const stopSession = () => run(async () => {
-    recorder.stopRecording();
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.requestData();
+      recorder.stop();
+    }
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    await waitForSpeechQueue();
+    await flushRetainedTranscript();
     if (currentSession) {
       setCurrentSession(await updateListeningSession(currentSession.id, { status: "stopped" }));
     }
-    setStatus("Listening stopped. Transcribe the recorded segment when ready.");
+    setListeningState("Stopped");
+    setStatus("Listening stopped. Remaining speech will finish processing automatically.");
   }, "Could not stop listening.");
 
-  const transcribeAndAppend = () => run(async () => {
-    if (!currentSession || !recorder.audioBlob) {
-      return;
+  const pauseSession = () => run(async () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder?.state === "recording") {
+      recorder.requestData();
+      recorder.pause();
+      setListeningState("Paused");
+      await waitForSpeechQueue();
+      await flushRetainedTranscript();
+      if (currentSession) {
+        setCurrentSession(await updateListeningSession(currentSession.id, { status: "draft" }));
+      }
     }
-    const transcript = await transcribeAudioRecording({
-      audioBlob: recorder.audioBlob,
-      fileName: recorder.fileName,
-      title: `${currentSession.title} segment`,
-    });
-    const result = await appendTranscriptSegment(currentSession.id, {
-      text: transcript.transcript_text,
-      source: "whisper.cpp",
-      source_transcript_id: transcript.id,
-    });
-    setCurrentSession(result.session);
-    recorder.resetRecording();
-    setStatus(`Saved transcript segment with ${result.activations.length} trigger activation${result.activations.length === 1 ? "" : "s"}.`);
-  }, "Could not transcribe and save the segment.");
+  }, "Could not pause listening.");
 
-  const appendManualText = () => run(async () => {
-    if (!currentSession || !manualText.trim()) {
+  const resumeSession = () => run(async () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder?.state === "paused") {
+      recorder.resume();
+      setListeningState("Listening");
+      if (currentSession) {
+        setCurrentSession(await updateListeningSession(currentSession.id, { status: "active" }));
+      }
+    }
+  }, "Could not resume listening.");
+
+  const saveSession = () => run(async () => {
+    if (currentSession) {
+      setCurrentSession(await updateListeningSession(currentSession.id, { status: currentSession.status }));
+      setStatus("Session saved.");
+    }
+  }, "Could not save session.");
+
+  const discardSession = () => run(async () => {
+    if (!currentSession || !window.confirm("Discard this session?")) {
       return;
     }
-    const result = await appendTranscriptSegment(currentSession.id, { text: manualText.trim(), source: "manual" });
-    setCurrentSession(result.session);
-    setManualText("");
-    setStatus(`Saved manual transcript with ${result.activations.length} activation${result.activations.length === 1 ? "" : "s"}.`);
-  }, "Could not save transcript text.");
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    retainedTranscriptRef.current = "";
+    await updateListeningSession(currentSession.id, { status: "deleted" });
+    setCurrentSession(null);
+    currentSessionRef.current = null;
+    setListeningState("Idle");
+    setStatus("Session discarded.");
+  }, "Could not discard session.");
 
   const saveTrigger = () => run(async () => {
     const saved = editingTrigger
@@ -314,39 +523,27 @@ export function ListenCommandsPage() {
         <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4">
-              <span className={`badge ${recorder.isRecording && !recorder.isPaused ? "badge-error" : "badge-ghost"} gap-2`}>
-                {recorder.isRecording && !recorder.isPaused ? <span className="h-2 w-2 rounded-full bg-current" /> : null}
+              <span className={`badge ${listeningState === "Listening" || listeningState === "Processing speech" ? "badge-error" : "badge-ghost"} gap-2`}>
+                {listeningState === "Listening" || listeningState === "Processing speech" ? <span className="h-2 w-2 rounded-full bg-current" /> : null}
                 {listeningState}
               </span>
-              <button className="btn btn-primary btn-sm" disabled={isWorking || recorder.isRecording} onClick={startSession}>Start</button>
-              <button className="btn btn-ghost btn-sm" disabled={!recorder.isRecording || recorder.isPaused} onClick={recorder.pauseRecording}>Pause</button>
-              <button className="btn btn-ghost btn-sm" disabled={!recorder.isPaused} onClick={recorder.resumeRecording}>Resume</button>
-              <button className="btn btn-outline btn-sm" disabled={!recorder.isRecording} onClick={stopSession}>Stop</button>
-              <button className="btn btn-ghost btn-sm" disabled={!currentSession} onClick={() => currentSession && updateListeningSession(currentSession.id, { status: "finalized" }).then(setCurrentSession)}>Save</button>
-              <button className="btn btn-error btn-outline btn-sm" disabled={!currentSession} onClick={() => currentSession && window.confirm("Discard this session?") && updateListeningSession(currentSession.id, { status: "deleted" }).then(() => setCurrentSession(null))}>Discard</button>
+              <button className="btn btn-primary btn-sm" disabled={isWorking || listeningState === "Listening" || listeningState === "Processing speech"} onClick={startSession}>Start</button>
+              <button className="btn btn-ghost btn-sm" disabled={listeningState !== "Listening" && listeningState !== "Processing speech"} onClick={pauseSession}>Pause</button>
+              <button className="btn btn-ghost btn-sm" disabled={listeningState !== "Paused"} onClick={resumeSession}>Resume</button>
+              <button className="btn btn-outline btn-sm" disabled={!currentSession || listeningState === "Idle" || listeningState === "Stopped"} onClick={stopSession}>Stop</button>
+              <button className="btn btn-ghost btn-sm" disabled={!currentSession} onClick={saveSession}>Save</button>
+              <button className="btn btn-error btn-outline btn-sm" disabled={!currentSession} onClick={discardSession}>Discard</button>
+              {pendingChunks ? <span className="badge badge-outline">{pendingChunks} chunk{pendingChunks === 1 ? "" : "s"} queued</span> : null}
             </div>
 
-            {recorder.recorderError ? <div className="alert alert-warning text-sm">{recorder.recorderError}</div> : null}
-            {recorder.formatCompatibilityWarning ? <div className="alert text-sm">{recorder.formatCompatibilityWarning}</div> : null}
-            {recorder.audioBlob ? (
-              <div className="rounded-box border border-base-300 bg-base-100 p-4">
-                <audio controls src={recorder.audioUrl} className="w-full" />
-                <div className="mt-3 flex gap-2">
-                  <button className="btn btn-primary btn-sm" disabled={!currentSession || isWorking} onClick={transcribeAndAppend}>Transcribe and save</button>
-                  <button className="btn btn-ghost btn-sm" onClick={recorder.resetRecording}>Clear recording</button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="rounded-box border border-base-300 bg-base-100 p-4">
-              <textarea className="textarea textarea-bordered min-h-24 w-full" value={manualText} onChange={(event) => setManualText(event.target.value)} placeholder="Paste or type a transcript segment to simulate local STT output." />
-              <button className="btn btn-secondary btn-sm mt-3" disabled={!currentSession || isWorking} onClick={appendManualText}>Append transcript</button>
-            </div>
+            {microphoneError ? <div className="alert alert-warning text-sm">{microphoneError}</div> : null}
+            {speechError ? <div className="alert alert-error text-sm">{speechError}</div> : null}
+            {lastTranscript ? <div className="alert text-sm">Latest finalized speech: {lastTranscript}</div> : null}
 
             <div className="rounded-box border border-base-300 bg-base-100 p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold">{currentSession?.title || "No active session"}</h2>
+                  <h2 className="text-lg font-semibold">{currentSession?.title || "Live document"}</h2>
                   <p className="text-sm text-base-content/60">Last saved {formatDate(currentSession?.last_saved_at)}</p>
                 </div>
                 <div className="flex gap-2">
@@ -356,7 +553,8 @@ export function ListenCommandsPage() {
               </div>
               <div className="space-y-3">
                 {activeBlocks.map((block) => <SessionBlock key={block.id} block={block} imageUrl={block.image_asset_id ? assetUrls[block.image_asset_id] : ""} showTimestamps={settings.show_timestamps} onChange={(payload) => updateSessionBlock(block.id, payload).then((updated) => setCurrentSession((session) => session ? { ...session, blocks: session.blocks.map((item) => item.id === updated.id ? updated : item) } : session))} />)}
-                {!activeBlocks.length ? <p className="text-sm text-base-content/60">Start listening or append text to build this session.</p> : null}
+                {!activeBlocks.length ? <p className="text-sm text-base-content/60">Press Start and begin speaking. Finalized speech and command blocks appear here automatically.</p> : null}
+                <div ref={documentEndRef} />
               </div>
             </div>
           </div>
@@ -482,7 +680,7 @@ export function ListenCommandsPage() {
               <li>Add the title, content, category, tags, and optional image that should be inserted when the command is detected.</li>
               <li>Save the command, then return to the Listen tab.</li>
               <li>Press Start to create a listening session and activate the microphone.</li>
-              <li>Press Stop when you finish speaking, then use Transcribe and save to send the recorded audio through the existing local STT backend.</li>
+              <li>Begin speaking. The app records short chunks, sends them through the existing local STT backend, and saves finalized text automatically.</li>
               <li>Review the saved transcript and inserted command blocks in the session workspace.</li>
               <li>Edit or remove blocks as needed, add notes, then save or export the session.</li>
             </ol>
@@ -506,9 +704,9 @@ export function ListenCommandsPage() {
               <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-base-content/80">
                 <li>Start creates a new active session and turns on the microphone.</li>
                 <li>Pause and Resume control the active recording.</li>
-                <li>Stop turns off the microphone and leaves the recording ready to transcribe.</li>
-                <li>Transcribe and save stores the final transcript segment and any command activations in SQLite.</li>
-                <li>The manual transcript box is useful for testing commands without using the microphone.</li>
+                <li>Stop turns off the microphone, flushes pending audio, and saves the session.</li>
+                <li>Finalized speech chunks and command activations are stored in SQLite as they are processed.</li>
+                <li>The latest finalized speech appears above the document while the structured document updates below it.</li>
                 <li>Manual insert adds a saved command block even when speech recognition missed it.</li>
               </ul>
             </div>

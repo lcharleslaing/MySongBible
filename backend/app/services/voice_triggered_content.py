@@ -357,22 +357,26 @@ class VoiceTriggeredContentService:
             source=payload.source,
             source_transcript_id=payload.source_transcript_id,
         )
-        transcript_block = SessionContentBlock(
-            session_id=session_id,
-            order_index=self._next_order(item),
-            block_type="transcript",
-            transcript_segment_id=None,
-            content=payload.text,
-        )
         self.session.add(segment)
-        self.session.add(transcript_block)
         self.session.commit()
         self.session.refresh(segment)
-        transcript_block.transcript_segment_id = segment.id
-        blocks.append(transcript_block)
 
+        cursor = 0
+        matches: list[TriggerMatch] = []
         if payload.is_final and self._trigger_detection_enabled(item):
-            for match in TriggerMatcher(self._enabled_trigger_aliases()).match(payload.text):
+            matches = TriggerMatcher(self._enabled_trigger_aliases()).match(payload.text)
+
+        for match in matches:
+            if match.start > cursor:
+                speech_block = self._add_or_merge_transcript_block(
+                    item,
+                    segment=segment,
+                    text=payload.text[cursor:match.start],
+                )
+                if speech_block:
+                    blocks.append(speech_block)
+            cursor = match.end
+            if payload.is_final:
                 if self._is_duplicate(session_id, match):
                     continue
                 image_reference = None
@@ -413,6 +417,20 @@ class VoiceTriggeredContentService:
                 self.session.add(block)
                 blocks.append(block)
                 activations.append(activation)
+
+        if cursor < len(payload.text):
+            speech_block = self._add_or_merge_transcript_block(
+                item,
+                segment=segment,
+                text=payload.text[cursor:],
+            )
+            if speech_block:
+                blocks.append(speech_block)
+
+        if not matches and not blocks:
+            speech_block = self._add_or_merge_transcript_block(item, segment=segment, text=payload.text)
+            if speech_block:
+                blocks.append(speech_block)
         item.transcript_text = "\n".join(segment.text for segment in self.list_segments(session_id))
         item.updated_at = utc_now()
         item.last_saved_at = item.updated_at
@@ -422,6 +440,57 @@ class VoiceTriggeredContentService:
             self.session.refresh(block)
         self.session.refresh(item)
         return item, segment, activations, blocks
+
+    def _add_or_merge_transcript_block(
+        self,
+        item: ListeningSession,
+        *,
+        segment: TranscriptSegment,
+        text: str,
+    ) -> SessionContentBlock | None:
+        cleaned = self._clean_speech_text(text)
+        if not cleaned:
+            return None
+        previous = self.session.exec(
+            select(SessionContentBlock)
+            .where(SessionContentBlock.session_id == item.id)
+            .where(SessionContentBlock.status == "active")
+            .order_by(SessionContentBlock.order_index.desc())
+        ).first()
+        if previous and previous.block_type == "transcript":
+            previous.content = self._join_speech(previous.content or "", cleaned)
+            previous.transcript_segment_id = segment.id
+            previous.updated_at = utc_now()
+            self.session.add(previous)
+            self.session.commit()
+            self.session.refresh(previous)
+            return previous
+        block = SessionContentBlock(
+            session_id=item.id or 0,
+            order_index=self._next_order(item),
+            block_type="transcript",
+            transcript_segment_id=segment.id,
+            content=cleaned,
+        )
+        self.session.add(block)
+        self.session.commit()
+        self.session.refresh(block)
+        return block
+
+    @staticmethod
+    def _clean_speech_text(text: str) -> str:
+        cleaned = re.sub(r"\s+", " ", text).strip()
+        cleaned = re.sub(r"^[\s,.;:!?-]+", "", cleaned)
+        cleaned = re.sub(r"[\s,;:-]+$", "", cleaned)
+        return cleaned.strip()
+
+    @staticmethod
+    def _join_speech(existing: str, addition: str) -> str:
+        if not existing:
+            return addition
+        if existing.endswith((".", "?", "!", "\n")):
+            return f"{existing}\n\n{addition}"
+        return f"{existing} {addition}"
 
     def add_manual_block(self, session_id: int, payload: ManualNoteCreate) -> SessionContentBlock:
         item = self.get_session_record(session_id)

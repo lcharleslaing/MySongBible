@@ -117,9 +117,14 @@ def test_simulated_transcript_integration_order(client) -> None:
     body = response.json()
     titles = [activation["snapshot_title"] for activation in body["activations"]]
     block_types = [block["block_type"] for block in body["session"]["blocks"]]
+    block_contents = [block["content"] for block in body["session"]["blocks"]]
 
     assert titles == ["Ace of Swords", "Ace of Pentacles"]
-    assert block_types == ["transcript", "trigger", "trigger"]
+    assert block_types == ["transcript", "trigger", "transcript", "trigger"]
+    assert block_contents[0] == "I began the reading with"
+    assert block_contents[1] == "Configured swords."
+    assert block_contents[2] == "I spoke about what it meant. Then I pulled"
+    assert block_contents[3] == "Configured pentacles."
 
 
 def test_service_persistence_restart_and_managed_image_metadata(client, tmp_path) -> None:
