@@ -247,6 +247,7 @@ export function AudioJournalPage() {
   const [simpleTitle, setSimpleTitle] = useState("");
   const [simpleAutoSavePending, setSimpleAutoSavePending] = useState(false);
   const [simpleSavingEntryId, setSimpleSavingEntryId] = useState<number | null>(null);
+  const [entryPendingDelete, setEntryPendingDelete] = useState<AudioJournalEntryRecord | null>(null);
   const [teleprompterScript, setTeleprompterScript] = useState("");
   const [teleprompterCountdown, setTeleprompterCountdown] = useState<number | null>(null);
   const [teleprompterElapsedSeconds, setTeleprompterElapsedSeconds] = useState(0);
@@ -588,8 +589,9 @@ export function AudioJournalPage() {
     }
   }
 
-  async function handleDeleteEntry(entry: AudioJournalEntryRecord) {
-    if (!window.confirm(`Delete "${entry.title}"?`)) {
+  async function confirmDeleteEntry() {
+    const entry = entryPendingDelete;
+    if (!entry) {
       return;
     }
 
@@ -605,6 +607,7 @@ export function AudioJournalPage() {
         setSelectedTakeId(null);
       }
       await loadEntries();
+      setEntryPendingDelete(null);
     } catch (error) {
       setErrorMessage(apiErrorMessage(error, "Could not delete the entry."));
     } finally {
@@ -1032,7 +1035,7 @@ export function AudioJournalPage() {
                             type="button"
                             className="btn btn-error btn-outline btn-xs"
                             disabled={workingAction === "delete-entry"}
-                            onClick={() => handleDeleteEntry(entry)}
+                            onClick={() => setEntryPendingDelete(entry)}
                           >
                             Delete
                           </button>
@@ -1063,7 +1066,7 @@ export function AudioJournalPage() {
                         type="button"
                         className="btn btn-error btn-outline btn-sm"
                         disabled={workingAction === "delete-entry"}
-                        onClick={() => handleDeleteEntry(selectedEntry)}
+                        onClick={() => setEntryPendingDelete(selectedEntry)}
                       >
                         Delete
                       </button>
@@ -1403,7 +1406,7 @@ export function AudioJournalPage() {
                           type="button"
                           className="btn btn-error btn-outline btn-sm"
                           disabled={workingAction === "delete-entry"}
-                          onClick={() => handleDeleteEntry(entry)}
+                          onClick={() => setEntryPendingDelete(entry)}
                         >
                           Delete
                         </button>
@@ -1951,6 +1954,45 @@ export function AudioJournalPage() {
               close
             </button>
           </div>
+        </div>
+      ) : null}
+
+      {entryPendingDelete ? (
+        <div className="modal modal-open" role="dialog" aria-labelledby="delete-entry-title">
+          <div className="modal-box max-w-md">
+            <h2 id="delete-entry-title" className="text-lg font-semibold">Delete recording</h2>
+            <p className="mt-2 text-sm text-base-content/70">
+              Delete &quot;{entryPendingDelete.title}&quot; from the audio journal?
+            </p>
+            <div className="modal-action">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={workingAction === "delete-entry"}
+                onClick={() => setEntryPendingDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-error"
+                disabled={workingAction === "delete-entry"}
+                onClick={confirmDeleteEntry}
+              >
+                {workingAction === "delete-entry" ? <span className="loading loading-spinner loading-xs" /> : null}
+                Delete
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="modal-backdrop"
+            aria-label="Cancel delete"
+            disabled={workingAction === "delete-entry"}
+            onClick={() => setEntryPendingDelete(null)}
+          >
+            close
+          </button>
         </div>
       ) : null}
     </div>
