@@ -27,7 +27,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed, width, setWidth }: Sideba
     event.currentTarget.setPointerCapture(event.pointerId);
 
     const resize = (moveEvent: globalThis.PointerEvent) => {
-      setWidth(Math.min(Math.max(startWidth + moveEvent.clientX - startX, 220), 520));
+      setWidth(Math.min(Math.max(startWidth + moveEvent.clientX - startX, 180), 420));
     };
     const stopResize = () => {
       window.removeEventListener("pointermove", resize);
