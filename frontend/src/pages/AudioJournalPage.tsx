@@ -145,7 +145,7 @@ function entrySourceLabel(entry: AudioJournalEntryRecord | null | undefined) {
     case "full-audio-journal":
       return "Full";
     default:
-      return "Full";
+      return entry?.title.startsWith("Voice note ") ? "Simple" : "Full";
   }
 }
 
@@ -534,14 +534,21 @@ export function AudioJournalPage() {
 
     try {
       const created = await createAudioJournalEntry(formData);
-      setSimpleSavingEntryId(created.entry.id);
-      setSelectedEntry(created.entry);
+      const sourceMetadata = JSON.stringify({
+        created_from: "simple-recorder",
+        created_from_label: "Simple",
+      });
+      const sourceMarkedEntry = await updateAudioJournalEntry(created.entry.id, {
+        metadata_json: sourceMetadata,
+      });
+      setSimpleSavingEntryId(sourceMarkedEntry.id);
+      setSelectedEntry(sourceMarkedEntry);
       setSelectedTakeId(created.take.id);
-      setEntries((current) => [created.entry, ...current.filter((entry) => entry.id !== created.entry.id)]);
+      setEntries((current) => [sourceMarkedEntry, ...current.filter((entry) => entry.id !== sourceMarkedEntry.id)]);
       resetRecording();
 
       setWorkingAction("transcribe");
-      const transcribed = await transcribeAudioJournalTake(created.entry.id, created.take.id);
+      const transcribed = await transcribeAudioJournalTake(sourceMarkedEntry.id, created.take.id);
       setSelectedEntry(transcribed.entry);
       setSelectedTakeId(transcribed.take.id);
       setEntries((current) => current.map((entry) => (entry.id === transcribed.entry.id ? transcribed.entry : entry)));
