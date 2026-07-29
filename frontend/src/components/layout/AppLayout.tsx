@@ -1,10 +1,34 @@
+import { useEffect, useState, type CSSProperties } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
+const sidebarWidthKey = "app-template-sidebar-width";
+const sidebarCollapsedKey = "app-template-sidebar-collapsed";
+const defaultSidebarWidth = 288;
+const collapsedSidebarWidth = 72;
+
 export function AppLayout() {
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(window.localStorage.getItem(sidebarWidthKey));
+    return Number.isFinite(saved) ? Math.min(Math.max(saved, 220), 520) : defaultSidebarWidth;
+  });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.localStorage.getItem(sidebarCollapsedKey) === "true");
+  const layoutWidth = isSidebarCollapsed ? collapsedSidebarWidth : sidebarWidth;
+
+  useEffect(() => {
+    window.localStorage.setItem(sidebarWidthKey, String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem(sidebarCollapsedKey, String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
   return (
-    <div className="drawer lg:drawer-open bg-base-200">
+    <div
+      className="drawer bg-base-200 lg:drawer-open lg:[grid-template-columns:var(--app-sidebar-width)_1fr]"
+      style={{ "--app-sidebar-width": `${layoutWidth}px` } as CSSProperties}
+    >
       <input id="app-sidebar" type="checkbox" className="drawer-toggle" />
       <div className="drawer-content min-h-screen">
         <Topbar />
@@ -12,7 +36,12 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
-      <Sidebar />
+      <Sidebar
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
+        width={sidebarWidth}
+        setWidth={setSidebarWidth}
+      />
     </div>
   );
 }

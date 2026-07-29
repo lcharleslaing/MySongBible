@@ -22,11 +22,20 @@ type FormState = {
   packageName: string;
   appVersion: string;
   appDisplayName: string;
+  sidebarShowIcon: boolean;
+  sidebarShowEyebrow: boolean;
+  sidebarShowTitle: boolean;
+  sidebarShowDescription: boolean;
   sidebarEyebrow: string;
   sidebarTitle: string;
   sidebarDescription: string;
+  topbarShowEyebrow: boolean;
+  topbarShowTitle: boolean;
   topbarEyebrow: string;
   topbarTitle: string;
+  homeShowEyebrow: boolean;
+  homeShowTitle: boolean;
+  homeShowDescription: boolean;
   homeEyebrow: string;
   homeTitle: string;
   homeDescription: string;
@@ -73,8 +82,10 @@ type IdentityStep = 0 | 1 | 2 | 3;
 type LocalSettingsStep = 0 | 1 | 2 | 3;
 
 const identityKeys = [
-  "packageName", "appVersion", "appDisplayName", "sidebarEyebrow", "sidebarTitle",
-  "sidebarDescription", "topbarEyebrow", "topbarTitle", "homeEyebrow", "homeTitle", "homeDescription",
+  "packageName", "appVersion", "appDisplayName", "sidebarShowIcon", "sidebarShowEyebrow", "sidebarShowTitle",
+  "sidebarShowDescription", "sidebarEyebrow", "sidebarTitle", "sidebarDescription", "topbarShowEyebrow",
+  "topbarShowTitle", "topbarEyebrow", "topbarTitle", "homeShowEyebrow", "homeShowTitle", "homeShowDescription",
+  "homeEyebrow", "homeTitle", "homeDescription",
 ] as const;
 
 const identityStepKeys: Record<IdentityStep, readonly (keyof FormState)[]> = {
@@ -85,9 +96,10 @@ const identityStepKeys: Record<IdentityStep, readonly (keyof FormState)[]> = {
 };
 
 function mergeIdentity(target: FormState, source: FormState): FormState {
-  const merged = { ...target };
-  identityKeys.forEach((key) => { merged[key] = source[key]; });
-  return merged;
+  return {
+    ...target,
+    ...Object.fromEntries(identityKeys.map((key) => [key, source[key]])),
+  } as FormState;
 }
 
 function readinessBadge(state: ReadinessState) {
@@ -105,11 +117,20 @@ const initialFormState: FormState = {
   packageName: "apptemplatebase",
   appVersion: "0.1.0",
   appDisplayName: "AppTemplateBase",
+  sidebarShowIcon: true,
+  sidebarShowEyebrow: true,
+  sidebarShowTitle: true,
+  sidebarShowDescription: true,
   sidebarEyebrow: "AppTemplateBase",
   sidebarTitle: "Desktop Starter",
   sidebarDescription: "Local-first shell for voice-enabled desktop apps.",
+  topbarShowEyebrow: true,
+  topbarShowTitle: true,
   topbarEyebrow: "Local-First Workspace",
   topbarTitle: "Frontend Starter",
+  homeShowEyebrow: true,
+  homeShowTitle: true,
+  homeShowDescription: true,
   homeEyebrow: "Overview",
   homeTitle: "Reusable local-first desktop starter",
   homeDescription: "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
@@ -133,11 +154,20 @@ function buildFormState(data: SettingsRecord): FormState {
     packageName: appDefinition.package_name,
     appVersion: appDefinition.app_version,
     appDisplayName: appDefinition.app_display_name,
+    sidebarShowIcon: appDefinition.sidebar_show_icon,
+    sidebarShowEyebrow: appDefinition.sidebar_show_eyebrow,
+    sidebarShowTitle: appDefinition.sidebar_show_title,
+    sidebarShowDescription: appDefinition.sidebar_show_description,
     sidebarEyebrow: appDefinition.sidebar_eyebrow,
     sidebarTitle: appDefinition.sidebar_title,
     sidebarDescription: appDefinition.sidebar_description,
+    topbarShowEyebrow: appDefinition.topbar_show_eyebrow,
+    topbarShowTitle: appDefinition.topbar_show_title,
     topbarEyebrow: appDefinition.topbar_eyebrow,
     topbarTitle: appDefinition.topbar_title,
+    homeShowEyebrow: appDefinition.home_show_eyebrow,
+    homeShowTitle: appDefinition.home_show_title,
+    homeShowDescription: appDefinition.home_show_description,
     homeEyebrow: appDefinition.home_eyebrow,
     homeTitle: appDefinition.home_title,
     homeDescription: appDefinition.home_description,
@@ -251,11 +281,20 @@ function buildAppDefinitionPayload(formState: FormState): AppDefinitionRecord {
     package_name: formState.packageName.trim().toLowerCase(),
     app_version: formState.appVersion.trim(),
     app_display_name: formState.appDisplayName.trim(),
+    sidebar_show_icon: formState.sidebarShowIcon,
+    sidebar_show_eyebrow: formState.sidebarShowEyebrow,
+    sidebar_show_title: formState.sidebarShowTitle,
+    sidebar_show_description: formState.sidebarShowDescription,
     sidebar_eyebrow: formState.sidebarEyebrow.trim(),
     sidebar_title: formState.sidebarTitle.trim(),
     sidebar_description: formState.sidebarDescription.trim(),
+    topbar_show_eyebrow: formState.topbarShowEyebrow,
+    topbar_show_title: formState.topbarShowTitle,
     topbar_eyebrow: formState.topbarEyebrow.trim(),
     topbar_title: formState.topbarTitle.trim(),
+    home_show_eyebrow: formState.homeShowEyebrow,
+    home_show_title: formState.homeShowTitle,
+    home_show_description: formState.homeShowDescription,
     home_eyebrow: formState.homeEyebrow.trim(),
     home_title: formState.homeTitle.trim(),
     home_description: formState.homeDescription.trim(),
@@ -865,9 +904,15 @@ export function SettingsPage() {
 
                   {identityStep === 1 ? (
                     <div className="grid gap-4 md:grid-cols-2">
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.sidebarShowIcon} onChange={(event) => setIdentityField("sidebarShowIcon", event.target.checked)} /><span className="label-text">Show sidebar app icon</span></label>
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.sidebarShowEyebrow} onChange={(event) => setIdentityField("sidebarShowEyebrow", event.target.checked)} /><span className="label-text">Show sidebar eyebrow</span></label>
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.sidebarShowTitle} onChange={(event) => setIdentityField("sidebarShowTitle", event.target.checked)} /><span className="label-text">Show sidebar title</span></label>
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.sidebarShowDescription} onChange={(event) => setIdentityField("sidebarShowDescription", event.target.checked)} /><span className="label-text">Show sidebar description</span></label>
                       <label className="form-control gap-2"><span className="label-text font-medium">Sidebar Eyebrow</span><input autoFocus className="input input-bordered" value={identityDraft.sidebarEyebrow} onChange={(event) => setIdentityField("sidebarEyebrow", event.target.value)} /></label>
                       <label className="form-control gap-2"><span className="label-text font-medium">Sidebar Title</span><input className="input input-bordered" value={identityDraft.sidebarTitle} onChange={(event) => setIdentityField("sidebarTitle", event.target.value)} /></label>
                       <label className="form-control gap-2 md:col-span-2"><span className="label-text font-medium">Sidebar Description</span><input className="input input-bordered" value={identityDraft.sidebarDescription} onChange={(event) => setIdentityField("sidebarDescription", event.target.value)} /></label>
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.topbarShowEyebrow} onChange={(event) => setIdentityField("topbarShowEyebrow", event.target.checked)} /><span className="label-text">Show topbar eyebrow</span></label>
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.topbarShowTitle} onChange={(event) => setIdentityField("topbarShowTitle", event.target.checked)} /><span className="label-text">Show topbar title</span></label>
                       <label className="form-control gap-2"><span className="label-text font-medium">Topbar Eyebrow</span><input className="input input-bordered" value={identityDraft.topbarEyebrow} onChange={(event) => setIdentityField("topbarEyebrow", event.target.value)} /></label>
                       <label className="form-control gap-2"><span className="label-text font-medium">Topbar Title</span><input className="input input-bordered" value={identityDraft.topbarTitle} onChange={(event) => setIdentityField("topbarTitle", event.target.value)} /></label>
                     </div>
@@ -875,6 +920,9 @@ export function SettingsPage() {
 
                   {identityStep === 2 ? (
                     <div className="grid gap-4 md:grid-cols-2">
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.homeShowEyebrow} onChange={(event) => setIdentityField("homeShowEyebrow", event.target.checked)} /><span className="label-text">Show home eyebrow</span></label>
+                      <label className="label cursor-pointer justify-start gap-3"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.homeShowTitle} onChange={(event) => setIdentityField("homeShowTitle", event.target.checked)} /><span className="label-text">Show home title</span></label>
+                      <label className="label cursor-pointer justify-start gap-3 md:col-span-2"><input type="checkbox" className="checkbox checkbox-primary" checked={identityDraft.homeShowDescription} onChange={(event) => setIdentityField("homeShowDescription", event.target.checked)} /><span className="label-text">Show home description</span></label>
                       <label className="form-control gap-2"><span className="label-text font-medium">Home Eyebrow</span><input autoFocus className="input input-bordered" value={identityDraft.homeEyebrow} onChange={(event) => setIdentityField("homeEyebrow", event.target.value)} /></label>
                       <label className="form-control gap-2"><span className="label-text font-medium">Home Title</span><input className="input input-bordered" value={identityDraft.homeTitle} onChange={(event) => setIdentityField("homeTitle", event.target.value)} /></label>
                       <label className="form-control gap-2 md:col-span-2"><span className="label-text font-medium">Home Description</span><textarea className="textarea textarea-bordered min-h-28" value={identityDraft.homeDescription} onChange={(event) => setIdentityField("homeDescription", event.target.value)} /></label>

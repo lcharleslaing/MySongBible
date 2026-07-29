@@ -17,6 +17,7 @@ def test_settings_endpoint(client) -> None:
     assert "tts_output_dir" in payload
     assert payload["home_page"]["show_marketing_on_startup"] is True
     assert len(payload["home_page"]["apps"]) >= 1
+    assert payload["home_page"]["apps"][0]["icon"]
 
 
 def test_home_page_settings_can_be_updated(client) -> None:
@@ -32,6 +33,7 @@ def test_home_page_settings_can_be_updated(client) -> None:
                 "description": "Configure this workspace.",
                 "path": "/settings",
                 "badge": "Configure",
+                "icon": "settings",
             }
         ],
     }

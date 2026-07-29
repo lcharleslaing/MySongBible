@@ -5,11 +5,20 @@ class AppDefinition(BaseModel):
     package_name: str
     app_version: str
     app_display_name: str
+    sidebar_show_icon: bool = True
+    sidebar_show_eyebrow: bool = True
+    sidebar_show_title: bool = True
+    sidebar_show_description: bool = True
     sidebar_eyebrow: str
     sidebar_title: str
     sidebar_description: str
+    topbar_show_eyebrow: bool = True
+    topbar_show_title: bool = True
     topbar_eyebrow: str
     topbar_title: str
+    home_show_eyebrow: bool = True
+    home_show_title: bool = True
+    home_show_description: bool = True
     home_eyebrow: str
     home_title: str
     home_description: str
@@ -21,6 +30,7 @@ class HomeApp(BaseModel):
     description: str = Field(min_length=1, max_length=180)
     path: str = Field(min_length=1, max_length=120, pattern=r"^/")
     badge: str = Field(default="App", min_length=1, max_length=40)
+    icon: str = Field(default="briefcase", min_length=1, max_length=40, pattern=r"^[a-z0-9-]+$")
 
 
 class HomePageSettings(BaseModel):
@@ -121,11 +131,20 @@ class AppDefinitionUpdateRequest(BaseModel):
     package_name: str = Field(min_length=1, max_length=214)
     app_version: str = Field(min_length=1, max_length=50)
     app_display_name: str = Field(min_length=1, max_length=80)
+    sidebar_show_icon: bool = True
+    sidebar_show_eyebrow: bool = True
+    sidebar_show_title: bool = True
+    sidebar_show_description: bool = True
     sidebar_eyebrow: str = Field(min_length=1, max_length=80)
     sidebar_title: str = Field(min_length=1, max_length=80)
     sidebar_description: str = Field(min_length=1, max_length=180)
+    topbar_show_eyebrow: bool = True
+    topbar_show_title: bool = True
     topbar_eyebrow: str = Field(min_length=1, max_length=80)
     topbar_title: str = Field(min_length=1, max_length=80)
+    home_show_eyebrow: bool = True
+    home_show_title: bool = True
+    home_show_description: bool = True
     home_eyebrow: str = Field(min_length=1, max_length=80)
     home_title: str = Field(min_length=1, max_length=120)
     home_description: str = Field(min_length=1, max_length=260)

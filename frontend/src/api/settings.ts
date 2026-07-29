@@ -43,11 +43,20 @@ export type AppDefinitionRecord = {
   package_name: string;
   app_version: string;
   app_display_name: string;
+  sidebar_show_icon: boolean;
+  sidebar_show_eyebrow: boolean;
+  sidebar_show_title: boolean;
+  sidebar_show_description: boolean;
   sidebar_eyebrow: string;
   sidebar_title: string;
   sidebar_description: string;
+  topbar_show_eyebrow: boolean;
+  topbar_show_title: boolean;
   topbar_eyebrow: string;
   topbar_title: string;
+  home_show_eyebrow: boolean;
+  home_show_title: boolean;
+  home_show_description: boolean;
   home_eyebrow: string;
   home_title: string;
   home_description: string;
@@ -59,6 +68,7 @@ export type HomeAppRecord = {
   description: string;
   path: string;
   badge: string;
+  icon: string;
 };
 
 export type HomePageSettingsRecord = {

@@ -1,6 +1,7 @@
 import { PageHeader } from "../components/ui/PageHeader";
 import { Link } from "react-router-dom";
 import { updateHomePage } from "../api/settings";
+import { AppIcon } from "../components/icons/AppIconLibrary";
 import { useAppDefinition } from "../context/AppDefinitionContext";
 
 export function HomePage() {
@@ -15,9 +16,9 @@ export function HomePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={appDefinition.home_eyebrow}
-        title={appDefinition.home_title}
-        description={appDefinition.home_description}
+        eyebrow={appDefinition.home_show_eyebrow ? appDefinition.home_eyebrow : ""}
+        title={appDefinition.home_show_title ? appDefinition.home_title : ""}
+        description={appDefinition.home_show_description ? appDefinition.home_description : ""}
       />
 
       {homePage.show_marketing_on_startup ? (
@@ -36,7 +37,7 @@ export function HomePage() {
       <section>
         <div className="mb-4 flex items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.25em] text-base-content/60">Dashboard</p><h2 className="mt-1 text-2xl font-semibold">Your apps</h2></div><span className="badge badge-ghost">{homePage.apps.length} available</span></div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {homePage.apps.map((app) => <Link key={app.id} to={app.path} className="card border border-base-300 bg-base-100 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"><div className="card-body"><div className="flex items-center justify-between gap-3"><span className="badge badge-primary badge-outline">{app.badge}</span><span aria-hidden="true" className="text-xl text-base-content/40">→</span></div><h3 className="card-title mt-2">{app.label}</h3><p className="text-sm text-base-content/70">{app.description}</p></div></Link>)}
+          {homePage.apps.map((app) => <Link key={app.id} to={app.path} className="card border border-base-300 bg-base-100 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"><div className="card-body"><div className="flex items-center justify-between gap-3"><span className="grid h-11 w-11 place-items-center rounded-box bg-primary/10 text-primary"><AppIcon name={app.icon} className="h-5 w-5" /></span><span className="badge badge-primary badge-outline">{app.badge}</span></div><h3 className="card-title mt-2">{app.label}</h3><p className="text-sm text-base-content/70">{app.description}</p></div></Link>)}
         </div>
       </section>
     </div>

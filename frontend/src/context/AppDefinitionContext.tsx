@@ -6,11 +6,20 @@ const defaultAppDefinition: AppDefinitionRecord = {
   package_name: "apptemplatebase",
   app_version: "0.1.0",
   app_display_name: "AppTemplateBase",
+  sidebar_show_icon: true,
+  sidebar_show_eyebrow: true,
+  sidebar_show_title: true,
+  sidebar_show_description: true,
   sidebar_eyebrow: "AppTemplateBase",
   sidebar_title: "Desktop Starter",
   sidebar_description: "Local-first shell for voice-enabled desktop apps.",
+  topbar_show_eyebrow: true,
+  topbar_show_title: true,
   topbar_eyebrow: "Local-First Workspace",
   topbar_title: "Frontend Starter",
+  home_show_eyebrow: true,
+  home_show_title: true,
+  home_show_description: true,
   home_eyebrow: "Overview",
   home_title: "Reusable local-first desktop starter",
   home_description: "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
@@ -22,11 +31,23 @@ export const defaultHomePageSettings: HomePageSettingsRecord = {
   marketing_title: "Everything you need, right where you left it.",
   marketing_description: "A private, local-first workspace that brings your everyday tools together without getting in the way.",
   apps: [
-    { id: "audio-journal", label: "Audio Journal", description: "Record, review, and organize spoken notes.", path: "/audio-journal", badge: "Capture" },
-    { id: "settings", label: "Settings", description: "Personalize the app and configure this device.", path: "/settings", badge: "Configure" },
-    { id: "system-health", label: "System Health", description: "Check local services and runtime readiness.", path: "/system-health", badge: "Monitor" },
+    { id: "audio-journal", label: "Audio Journal", description: "Record, review, and organize spoken notes.", path: "/audio-journal", badge: "Capture", icon: "mic" },
+    { id: "settings", label: "Settings", description: "Personalize the app and configure this device.", path: "/settings", badge: "Configure", icon: "settings" },
+    { id: "system-health", label: "System Health", description: "Check local services and runtime readiness.", path: "/system-health", badge: "Monitor", icon: "activity" },
   ],
 };
+
+function normalizeAppDefinition(definition: AppDefinitionRecord): AppDefinitionRecord {
+  return { ...defaultAppDefinition, ...definition };
+}
+
+function normalizeHomePage(settings: HomePageSettingsRecord): HomePageSettingsRecord {
+  return {
+    ...defaultHomePageSettings,
+    ...settings,
+    apps: settings.apps.map((app) => ({ ...app, icon: app.icon || "briefcase" })),
+  };
+}
 
 type AppDefinitionContextValue = {
   appDefinition: AppDefinitionRecord;
@@ -44,8 +65,8 @@ export function AppDefinitionProvider({ children }: { children: ReactNode }) {
 
   const refreshAppDefinition = async () => {
     const settings = await getSettings();
-    setAppDefinition(settings.app_definition);
-    setHomePage(settings.home_page);
+    setAppDefinition(normalizeAppDefinition(settings.app_definition));
+    setHomePage(normalizeHomePage(settings.home_page));
   };
 
   useEffect(() => {
