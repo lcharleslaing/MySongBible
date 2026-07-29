@@ -37,6 +37,7 @@ export function useAudioRecorder() {
   const audioChunksRef = useRef<Blob[]>([]);
 
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState("");
   const [recorderError, setRecorderError] = useState("");
@@ -100,6 +101,7 @@ export function useAudioRecorder() {
       recorder.onerror = () => {
         setRecorderError("Recording failed. Check microphone permissions and try again.");
         setIsRecording(false);
+        setIsPaused(false);
       };
 
       recorder.onstop = () => {
@@ -111,6 +113,7 @@ export function useAudioRecorder() {
         setAudioUrl(nextAudioUrl);
         setMimeType(nextMimeType);
         setIsRecording(false);
+        setIsPaused(false);
 
         mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
         mediaStreamRef.current = null;
@@ -132,6 +135,26 @@ export function useAudioRecorder() {
     recorder.stop();
   };
 
+  const pauseRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") {
+      return;
+    }
+
+    recorder.pause();
+    setIsPaused(true);
+  };
+
+  const resumeRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "paused") {
+      return;
+    }
+
+    recorder.resume();
+    setIsPaused(false);
+  };
+
   const resetRecording = () => {
     mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -139,6 +162,7 @@ export function useAudioRecorder() {
     mediaStreamRef.current = null;
     audioChunksRef.current = [];
     setIsRecording(false);
+    setIsPaused(false);
     setAudioBlob(null);
     setRecorderError("");
     setMimeType("");
@@ -156,10 +180,13 @@ export function useAudioRecorder() {
     audioUrl,
     fileName,
     formatCompatibilityWarning,
+    isPaused,
     isRecording,
     mimeType,
+    pauseRecording,
     recorderError,
     resetRecording,
+    resumeRecording,
     startRecording,
     stopRecording,
   };

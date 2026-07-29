@@ -177,10 +177,13 @@ export function AudioJournalPage() {
     audioUrl: recordedAudioUrl,
     fileName: recordedFileName,
     formatCompatibilityWarning,
+    isPaused,
     isRecording,
     mimeType: recordedMimeType,
+    pauseRecording,
     recorderError,
     resetRecording,
+    resumeRecording,
     startRecording,
     stopRecording,
   } = useAudioRecorder();
@@ -228,6 +231,10 @@ export function AudioJournalPage() {
   const [baselineNotes, setBaselineNotes] = useState("");
   const [baselineIsDefault, setBaselineIsDefault] = useState(true);
   const [isTeleprompterOpen, setIsTeleprompterOpen] = useState(false);
+  const [journalMode, setJournalMode] = useState<"simple" | "advanced">("simple");
+  const [simpleTitle, setSimpleTitle] = useState("");
+  const [simpleAutoSavePending, setSimpleAutoSavePending] = useState(false);
+  const [simpleSavingEntryId, setSimpleSavingEntryId] = useState<number | null>(null);
   const [teleprompterScript, setTeleprompterScript] = useState("");
   const [teleprompterCountdown, setTeleprompterCountdown] = useState<number | null>(null);
   const [teleprompterElapsedSeconds, setTeleprompterElapsedSeconds] = useState(0);
@@ -276,6 +283,15 @@ export function AudioJournalPage() {
   useEffect(() => {
     loadEntries();
   }, []);
+
+  useEffect(() => {
+    if (!simpleAutoSavePending || !recordedAudioBlob || journalMode !== "simple") {
+      return;
+    }
+
+    setSimpleAutoSavePending(false);
+    void handleCreateSimpleEntry(recordedAudioBlob);
+  }, [journalMode, recordedAudioBlob, simpleAutoSavePending]);
 
   useEffect(() => {
     return () => {
@@ -467,6 +483,55 @@ export function AudioJournalPage() {
       setErrorMessage(apiErrorMessage(error, "Could not save the journal entry."));
     } finally {
       setWorkingAction("");
+    }
+  }
+
+  function defaultSimpleTitle() {
+    return `Voice note ${new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date())}`;
+  }
+
+  function stopSimpleRecording() {
+    setSimpleAutoSavePending(true);
+    stopRecording();
+  }
+
+  async function handleCreateSimpleEntry(audioBlob: Blob) {
+    const title = simpleTitle.trim() || defaultSimpleTitle();
+    const formData = new FormData();
+    formData.append("audio_file", audioBlob, recordedFileName || `audio-journal-recording.${recordedMimeType.includes("ogg") ? "ogg" : "webm"}`);
+    formData.append("title", title);
+    formData.append("voice_style", "natural");
+
+    setWorkingAction("create-entry");
+    setSimpleSavingEntryId(null);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const created = await createAudioJournalEntry(formData);
+      setSimpleSavingEntryId(created.entry.id);
+      setSelectedEntry(created.entry);
+      setSelectedTakeId(created.take.id);
+      setEntries((current) => [created.entry, ...current.filter((entry) => entry.id !== created.entry.id)]);
+      resetRecording();
+
+      setWorkingAction("transcribe");
+      const transcribed = await transcribeAudioJournalTake(created.entry.id, created.take.id);
+      setSelectedEntry(transcribed.entry);
+      setSelectedTakeId(transcribed.take.id);
+      setEntries((current) => current.map((entry) => (entry.id === transcribed.entry.id ? transcribed.entry : entry)));
+      setSimpleTitle("");
+      setSuccessMessage(`Saved and transcribed ${transcribed.entry.title}.`);
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, "Could not save and transcribe the recording."));
+    } finally {
+      setWorkingAction("");
+      setSimpleSavingEntryId(null);
     }
   }
 
@@ -805,6 +870,178 @@ export function AudioJournalPage() {
         </div>
       ) : null}
 
+      <div className="tabs tabs-boxed w-fit">
+        <button
+          type="button"
+          className={`tab ${journalMode === "simple" ? "tab-active" : ""}`}
+          onClick={() => setJournalMode("simple")}
+        >
+          Simple Recorder
+        </button>
+        <button
+          type="button"
+          className={`tab ${journalMode === "advanced" ? "tab-active" : ""}`}
+          onClick={() => setJournalMode("advanced")}
+        >
+          Full Journal
+        </button>
+      </div>
+
+      {journalMode === "simple" ? (
+        <section className="grid gap-6 xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
+          <div className="space-y-6">
+            <div className="card border border-base-300 bg-base-100 shadow-sm">
+              <div className="card-body gap-5">
+                <div>
+                  <h2 className="card-title text-xl">Simple Recorder</h2>
+                  <p className="mt-1 text-sm text-base-content/60">
+                    Record a note, stop, and it saves into the full Audio Journal with a transcript.
+                  </p>
+                </div>
+
+                <label className="form-control">
+                  <span className="label-text">Title</span>
+                  <input
+                    className="input input-bordered"
+                    value={simpleTitle}
+                    disabled={isRecording || workingAction === "create-entry" || workingAction === "transcribe"}
+                    onChange={(event) => setSimpleTitle(event.target.value)}
+                    placeholder={defaultSimpleTitle()}
+                  />
+                </label>
+
+                <div className="join">
+                  <button
+                    type="button"
+                    className="btn join-item btn-primary"
+                    disabled={isRecording || workingAction === "create-entry" || workingAction === "transcribe"}
+                    onClick={() => {
+                      setSimpleAutoSavePending(false);
+                      resetRecording();
+                      void startRecording();
+                    }}
+                  >
+                    Record
+                  </button>
+                  <button
+                    type="button"
+                    className="btn join-item"
+                    disabled={!isRecording || workingAction === "create-entry" || workingAction === "transcribe"}
+                    onClick={isPaused ? resumeRecording : pauseRecording}
+                  >
+                    {isPaused ? "Resume" : "Pause"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn join-item btn-error"
+                    disabled={!isRecording || workingAction === "create-entry" || workingAction === "transcribe"}
+                    onClick={stopSimpleRecording}
+                  >
+                    Stop
+                  </button>
+                </div>
+
+                {isRecording ? (
+                  <div className={`alert py-2 text-sm ${isPaused ? "alert-warning" : "alert-error"}`}>
+                    <span>{isPaused ? "Recording paused." : "Recording..."}</span>
+                  </div>
+                ) : null}
+                {workingAction === "create-entry" || workingAction === "transcribe" ? (
+                  <div className="alert alert-info py-2 text-sm">
+                    <span className="loading loading-spinner loading-sm" />
+                    <span>{workingAction === "create-entry" ? "Saving recording..." : "Transcribing recording..."}</span>
+                  </div>
+                ) : null}
+                {recorderError ? <div className="alert alert-warning py-2 text-sm">{recorderError}</div> : null}
+                {formatCompatibilityWarning ? <div className="alert alert-info py-2 text-sm">{formatCompatibilityWarning}</div> : null}
+              </div>
+            </div>
+
+            <div className="card border border-base-300 bg-base-100 shadow-sm">
+              <div className="card-body gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="card-title text-xl">Recordings</h2>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadEntries()}>
+                    Refresh
+                  </button>
+                </div>
+                {isLoading ? <span className="loading loading-spinner loading-md" /> : null}
+                {!isLoading && entries.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                    No recordings yet.
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  {entries.map((entry) => {
+                    const active = entry.takes.find((take) => take.id === entry.active_take_id) || entry.takes[0] || null;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className={`w-full rounded-lg border p-3 text-left transition ${
+                          selectedEntry?.id === entry.id ? "border-primary bg-primary/10" : "border-base-300 bg-base-100 hover:bg-base-200"
+                        }`}
+                        onClick={() => {
+                          setSelectedEntry(entry);
+                          setSelectedTakeId(active?.id || null);
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">{entry.title}</p>
+                            <p className="text-xs text-base-content/60">{formatDate(entry.created_at)}</p>
+                          </div>
+                          <span className="badge badge-outline">{active?.transcription_status || "no take"}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card border border-base-300 bg-base-100 shadow-sm">
+            <div className="card-body gap-5">
+              {selectedEntry && selectedTake ? (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="card-title text-2xl">{selectedEntry.title}</h2>
+                      <p className="text-sm text-base-content/60">{formatDate(selectedEntry.created_at)}</p>
+                    </div>
+                    <button type="button" className="btn btn-sm" onClick={() => setJournalMode("advanced")}>
+                      Open Full Journal
+                    </button>
+                  </div>
+
+                  {takeAudioUrl ? <audio className="w-full" controls src={takeAudioUrl} /> : null}
+
+                  <div className="rounded-lg border border-base-300 bg-base-200 p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-semibold">Transcript</h3>
+                      <span className="badge badge-outline">{selectedTake.transcription_status}</span>
+                    </div>
+                    {selectedTake.transcript_text?.trim() ? (
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-base-content/80">{selectedTake.transcript_text}</p>
+                    ) : (
+                      <p className="text-sm text-base-content/60">
+                        {simpleSavingEntryId === selectedEntry.id || workingAction === "transcribe"
+                          ? "Transcription is running..."
+                          : "No transcript yet."}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed border-base-300 p-6 text-sm text-base-content/60">
+                  Select a recording to view its transcript and play the audio.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : (
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="space-y-6">
           <div className="card border border-base-300 bg-base-100 shadow-sm">
@@ -1457,6 +1694,7 @@ export function AudioJournalPage() {
           )}
         </div>
       </section>
+      )}
 
       {isTeleprompterOpen && selectedEntry ? (
         <div className="modal modal-open">
