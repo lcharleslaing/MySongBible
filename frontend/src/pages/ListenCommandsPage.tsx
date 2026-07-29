@@ -46,13 +46,10 @@ type TriggerForm = {
 
 type ListeningState = "Idle" | "Starting" | "Listening" | "Processing speech" | "Paused" | "Stopped" | "Microphone unavailable" | "Speech service unavailable";
 
-const liveChunkMs = 3000;
-const preferredMimeTypes = [
-  "audio/ogg;codecs=opus",
-  "audio/ogg",
-  "audio/webm;codecs=opus",
-  "audio/webm",
-] as const;
+const silenceFinalizeMs = 950;
+const maxUtteranceMs = 12000;
+const preRollMs = 300;
+const speechRmsThreshold = 0.018;
 
 const blankTriggerForm: TriggerForm = {
   primary_phrase: "",
@@ -69,35 +66,83 @@ const blankTriggerForm: TriggerForm = {
   duplicate_cooldown_seconds: "",
 };
 
-function getSupportedMimeType() {
-  if (typeof MediaRecorder === "undefined") {
-    return "";
-  }
-
-  return preferredMimeTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || "";
-}
-
-function guessFileExtension(mimeType: string) {
-  if (mimeType.includes("ogg")) {
-    return "ogg";
-  }
-
-  if (mimeType.includes("webm")) {
-    return "webm";
-  }
-
-  if (mimeType.includes("wav")) {
-    return "wav";
-  }
-
-  return "bin";
-}
-
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
     return error.message || fallback;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function downsampleTo16k(input: Float32Array, sourceRate: number) {
+  const targetRate = 16000;
+  if (sourceRate === targetRate) {
+    return input;
+  }
+  const ratio = sourceRate / targetRate;
+  const output = new Float32Array(Math.floor(input.length / ratio));
+  for (let index = 0; index < output.length; index += 1) {
+    const start = Math.floor(index * ratio);
+    const end = Math.min(Math.floor((index + 1) * ratio), input.length);
+    let sum = 0;
+    for (let inputIndex = start; inputIndex < end; inputIndex += 1) {
+      sum += input[inputIndex];
+    }
+    output[index] = sum / Math.max(end - start, 1);
+  }
+  return output;
+}
+
+function encodeWav(samples: Float32Array, sampleRate: number) {
+  const bytesPerSample = 2;
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  const view = new DataView(buffer);
+  const writeString = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * bytesPerSample, true);
+  let offset = 44;
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+
+function concatFloat32(chunks: Float32Array[]) {
+  const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const output = new Float32Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return output;
+}
+
+function isNonSpeechText(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned) {
+    return true;
+  }
+  if (["[blank_audio]", "[silence]", "(silence)", "silence", "[music]", "(music)"].includes(cleaned.toLowerCase())) {
+    return true;
+  }
+  return !/[\w]/u.test(cleaned);
 }
 
 function formatDate(value: string | null | undefined) {
@@ -174,7 +219,6 @@ export function ListenCommandsPage() {
   const [assetUrls, setAssetUrls] = useState<Record<number, string>>({});
   const [listeningState, setListeningState] = useState<ListeningState>("Idle");
   const [pendingChunks, setPendingChunks] = useState(0);
-  const [lastTranscript, setLastTranscript] = useState("");
   const [microphoneError, setMicrophoneError] = useState("");
   const [speechError, setSpeechError] = useState("");
   const [settings, setSettings] = useState({
@@ -186,18 +230,22 @@ export function ListenCommandsPage() {
     automatic_save: true,
     strict_matching: false,
   });
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const chunkPartsRef = useRef<Blob[]>([]);
   const chunkQueueRef = useRef<Blob[]>([]);
   const isProcessingRef = useRef(false);
   const currentSessionRef = useRef<ListeningSessionRecord | null>(null);
   const chunkIndexRef = useRef(0);
-  const mimeTypeRef = useRef("");
   const documentEndRef = useRef<HTMLDivElement | null>(null);
   const retainedTranscriptRef = useRef("");
-  const shouldContinueRecordingRef = useRef(false);
-  const chunkTimerRef = useRef<number | null>(null);
+  const isListeningRef = useRef(false);
+  const isSpeechActiveRef = useRef(false);
+  const speechStartedAtRef = useRef(0);
+  const lastSpeechAtRef = useRef(0);
+  const preRollRef = useRef<Float32Array[]>([]);
+  const utteranceRef = useRef<Float32Array[]>([]);
 
   const activeBlocks = useMemo(() => currentSession?.blocks.filter((block) => block.status !== "deleted") || [], [currentSession]);
 
@@ -211,11 +259,10 @@ export function ListenCommandsPage() {
 
   useEffect(() => {
     return () => {
-      shouldContinueRecordingRef.current = false;
-      if (chunkTimerRef.current) {
-        window.clearTimeout(chunkTimerRef.current);
-      }
-      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+      isListeningRef.current = false;
+      audioProcessorRef.current?.disconnect();
+      audioSourceRef.current?.disconnect();
+      audioContextRef.current?.close().catch(() => undefined);
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
@@ -274,59 +321,114 @@ export function ListenCommandsPage() {
     processChunkQueue();
   };
 
-  const startRecorderChunk = (stream: MediaStream) => {
-    if (!shouldContinueRecordingRef.current) {
-      return;
-    }
-    const supportedMimeType = getSupportedMimeType();
-    const recorder = supportedMimeType ? new MediaRecorder(stream, { mimeType: supportedMimeType }) : new MediaRecorder(stream);
-    chunkPartsRef.current = [];
-    mediaRecorderRef.current = recorder;
-    mimeTypeRef.current = recorder.mimeType || supportedMimeType || "audio/webm";
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunkPartsRef.current.push(event.data);
-      }
-    };
-    recorder.onerror = () => {
-      setMicrophoneError("Recording failed. Check microphone permissions and try again.");
-      setListeningState("Microphone unavailable");
-      shouldContinueRecordingRef.current = false;
-    };
-    recorder.onstop = () => {
-      const parts = chunkPartsRef.current;
-      chunkPartsRef.current = [];
-      if (parts.length) {
-        enqueueChunk(new Blob(parts, { type: mimeTypeRef.current || "audio/webm" }));
-      }
-      if (shouldContinueRecordingRef.current && stream.active) {
-        window.setTimeout(() => startRecorderChunk(stream), 0);
-      }
-    };
-    recorder.start();
-    setListeningState("Listening");
-    chunkTimerRef.current = window.setTimeout(() => {
-      stopCurrentRecorderChunk().catch(() => undefined);
-    }, liveChunkMs);
+  const resetVoiceBuffers = () => {
+    isSpeechActiveRef.current = false;
+    speechStartedAtRef.current = 0;
+    lastSpeechAtRef.current = 0;
+    preRollRef.current = [];
+    utteranceRef.current = [];
   };
 
-  const stopCurrentRecorderChunk = async () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") {
+  const finalizeUtterance = () => {
+    if (!utteranceRef.current.length || !audioContextRef.current) {
+      resetVoiceBuffers();
       return;
     }
-    if (chunkTimerRef.current) {
-      window.clearTimeout(chunkTimerRef.current);
-      chunkTimerRef.current = null;
+    const sourceRate = audioContextRef.current.sampleRate;
+    const raw = concatFloat32(utteranceRef.current);
+    const durationMs = (raw.length / sourceRate) * 1000;
+    resetVoiceBuffers();
+    if (durationMs < 350) {
+      return;
     }
-    await new Promise<void>((resolve) => {
-      const previousOnStop = recorder.onstop;
-      recorder.onstop = (event) => {
-        previousOnStop?.call(recorder, event);
-        resolve();
-      };
-      recorder.stop();
+    const wav = encodeWav(downsampleTo16k(raw, sourceRate), 16000);
+    enqueueChunk(wav);
+  };
+
+  const handleAudioFrame = (input: Float32Array) => {
+    if (!isListeningRef.current || !audioContextRef.current) {
+      return;
+    }
+    const frame = new Float32Array(input);
+    const sampleRate = audioContextRef.current.sampleRate;
+    const now = audioContextRef.current.currentTime * 1000;
+    const rms = Math.sqrt(frame.reduce((sum, sample) => sum + sample * sample, 0) / Math.max(frame.length, 1));
+    const preRollFrameLimit = Math.max(1, Math.ceil((preRollMs / 1000) * sampleRate / frame.length));
+    const hasSpeech = rms >= speechRmsThreshold;
+
+    if (!isSpeechActiveRef.current) {
+      preRollRef.current.push(frame);
+      if (preRollRef.current.length > preRollFrameLimit) {
+        preRollRef.current.shift();
+      }
+      if (hasSpeech) {
+        isSpeechActiveRef.current = true;
+        speechStartedAtRef.current = now;
+        lastSpeechAtRef.current = now;
+        utteranceRef.current = [...preRollRef.current, frame];
+        preRollRef.current = [];
+      }
+      return;
+    }
+
+    utteranceRef.current.push(frame);
+    if (hasSpeech) {
+      lastSpeechAtRef.current = now;
+    }
+    const silenceMs = now - lastSpeechAtRef.current;
+    const utteranceMs = now - speechStartedAtRef.current;
+    if (silenceMs >= silenceFinalizeMs || utteranceMs >= maxUtteranceMs) {
+      finalizeUtterance();
+    }
+  };
+
+  const startAudioPipeline = async () => {
+    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      throw new Error("AudioContext is not available in this browser runtime.");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
     });
+    const context = new AudioContextConstructor();
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (event) => {
+      handleAudioFrame(event.inputBuffer.getChannelData(0));
+    };
+    source.connect(processor);
+    processor.connect(context.destination);
+    mediaStreamRef.current = stream;
+    audioContextRef.current = context;
+    audioSourceRef.current = source;
+    audioProcessorRef.current = processor;
+    isListeningRef.current = true;
+    resetVoiceBuffers();
+    setListeningState("Listening");
+  };
+
+  const stopAudioPipeline = async ({ flush }: { flush: boolean }) => {
+    isListeningRef.current = false;
+    if (flush) {
+      finalizeUtterance();
+    } else {
+      resetVoiceBuffers();
+    }
+    audioProcessorRef.current?.disconnect();
+    audioSourceRef.current?.disconnect();
+    audioProcessorRef.current = null;
+    audioSourceRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    if (audioContextRef.current) {
+      await audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
   };
 
   const splitWithRetainedTail = (text: string, force = false) => {
@@ -355,7 +457,6 @@ export function ListenCommandsPage() {
     });
     currentSessionRef.current = result.session;
     setCurrentSession(result.session);
-    setLastTranscript(text);
   };
 
   const processChunkQueue = async () => {
@@ -375,24 +476,30 @@ export function ListenCommandsPage() {
       }
       try {
         setListeningState((state) => state === "Paused" || state === "Stopped" ? state : "Processing speech");
-        const chunkMimeType = chunk.type || mimeTypeRef.current || "audio/webm";
         const transcript = await transcribeAudioRecording({
           audioBlob: chunk,
-          fileName: `listen-commands-${session.id}-${chunkIndexRef.current++}.${guessFileExtension(chunkMimeType)}`,
+          fileName: `listen-commands-${session.id}-${chunkIndexRef.current++}.wav`,
           title: `${session.title} live chunk`,
         });
         const text = transcript.transcript_text.trim();
+        if (isNonSpeechText(text)) {
+          continue;
+        }
         const committableText = splitWithRetainedTail(text);
         if (committableText) {
           await appendFinalizedText(session, committableText, transcript.id);
         }
-        if (mediaRecorderRef.current?.state === "recording") {
+        if (isListeningRef.current) {
           setListeningState("Listening");
         }
       } catch (nextError) {
         const message = errorMessage(nextError, "Speech service unavailable.");
+        if (message.includes("No speech detected") || message.includes("No speech text to save")) {
+          setListeningState(isListeningRef.current ? "Listening" : listeningState);
+          continue;
+        }
         setSpeechError(message.includes("convert audio to WAV") ? "Skipped one unreadable live audio chunk. Listening will continue." : message);
-        setListeningState(mediaRecorderRef.current?.state === "recording" ? "Listening" : "Speech service unavailable");
+        setListeningState(isListeningRef.current ? "Listening" : "Speech service unavailable");
       } finally {
         setPendingChunks(chunkQueueRef.current.length);
       }
@@ -422,33 +529,29 @@ export function ListenCommandsPage() {
     setSpeechError("");
     setListeningState("Starting");
     retainedTranscriptRef.current = "";
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setListeningState("Microphone unavailable");
       setMicrophoneError("Audio recording is not available in this environment.");
       return;
     }
-    const session = await createListeningSession({
-      status: "active",
-      settings_json: {
-        trigger_detection_enabled: settings.trigger_detection_enabled,
-        duplicate_cooldown_seconds: settings.duplicate_cooldown_seconds,
-        keep_trigger_words: settings.keep_trigger_words,
-      },
-    });
+    const session = currentSession && !["stopped", "finalized", "deleted"].includes(currentSession.status)
+      ? await updateListeningSession(currentSession.id, { status: "active" })
+      : await createListeningSession({
+          status: "active",
+          settings_json: {
+            trigger_detection_enabled: settings.trigger_detection_enabled,
+            duplicate_cooldown_seconds: settings.duplicate_cooldown_seconds,
+            keep_trigger_words: settings.keep_trigger_words,
+          },
+        });
     setCurrentSession(session);
     currentSessionRef.current = session;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaStreamRef.current = stream;
-    shouldContinueRecordingRef.current = true;
-    startRecorderChunk(stream);
+    await startAudioPipeline();
     setStatus("Listening live. Speech is transcribed and saved automatically.");
   }, "Could not start listening.");
 
   const stopSession = () => run(async () => {
-    shouldContinueRecordingRef.current = false;
-    await stopCurrentRecorderChunk();
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
+    await stopAudioPipeline({ flush: true });
     await waitForSpeechQueue();
     await flushRetainedTranscript();
     if (currentSession) {
@@ -459,9 +562,8 @@ export function ListenCommandsPage() {
   }, "Could not stop listening.");
 
   const pauseSession = () => run(async () => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      shouldContinueRecordingRef.current = false;
-      await stopCurrentRecorderChunk();
+    if (isListeningRef.current) {
+      await stopAudioPipeline({ flush: true });
       setListeningState("Paused");
       await waitForSpeechQueue();
       await flushRetainedTranscript();
@@ -472,10 +574,8 @@ export function ListenCommandsPage() {
   }, "Could not pause listening.");
 
   const resumeSession = () => run(async () => {
-    const stream = mediaStreamRef.current;
-    if (stream && listeningState === "Paused") {
-      shouldContinueRecordingRef.current = true;
-      startRecorderChunk(stream);
+    if (listeningState === "Paused") {
+      await startAudioPipeline();
       if (currentSession) {
         setCurrentSession(await updateListeningSession(currentSession.id, { status: "active" }));
       }
@@ -493,10 +593,7 @@ export function ListenCommandsPage() {
     if (!currentSession || !window.confirm("Discard this session?")) {
       return;
     }
-    shouldContinueRecordingRef.current = false;
-    await stopCurrentRecorderChunk();
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
+    await stopAudioPipeline({ flush: false });
     retainedTranscriptRef.current = "";
     await updateListeningSession(currentSession.id, { status: "deleted" });
     setCurrentSession(null);
@@ -584,7 +681,6 @@ export function ListenCommandsPage() {
 
             {microphoneError ? <div className="alert alert-warning text-sm">{microphoneError}</div> : null}
             {speechError ? <div className="alert alert-error text-sm">{speechError}</div> : null}
-            {lastTranscript ? <div className="alert text-sm">Latest finalized speech: {lastTranscript}</div> : null}
 
             <div className="rounded-box border border-base-300 bg-base-100 p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -597,8 +693,8 @@ export function ListenCommandsPage() {
                   <button className="btn btn-ghost btn-xs" disabled={!currentSession} onClick={() => exportSession("json")}>JSON</button>
                 </div>
               </div>
-              <div className="space-y-3">
-                {activeBlocks.map((block) => <SessionBlock key={block.id} block={block} imageUrl={block.image_asset_id ? assetUrls[block.image_asset_id] : ""} showTimestamps={settings.show_timestamps} onChange={(payload) => updateSessionBlock(block.id, payload).then((updated) => setCurrentSession((session) => session ? { ...session, blocks: session.blocks.map((item) => item.id === updated.id ? updated : item) } : session))} />)}
+              <div className="min-h-[28rem] rounded-box border border-base-300 bg-base-100 px-7 py-6 text-base leading-7 shadow-inner">
+                {activeBlocks.map((block) => <SessionBlock key={block.id} block={block} imageUrl={block.image_asset_id ? assetUrls[block.image_asset_id] : ""} onChange={(payload) => updateSessionBlock(block.id, payload).then((updated) => setCurrentSession((session) => session ? { ...session, blocks: session.blocks.map((item) => item.id === updated.id ? updated : item) } : session))} />)}
                 {!activeBlocks.length ? <p className="text-sm text-base-content/60">Press Start and begin speaking. Finalized speech and command blocks appear here automatically.</p> : null}
                 <div ref={documentEndRef} />
               </div>
@@ -783,36 +879,62 @@ export function ListenCommandsPage() {
   );
 }
 
-function SessionBlock({ block, imageUrl, showTimestamps, onChange }: { block: SessionContentBlockRecord; imageUrl: string; showTimestamps: boolean; onChange: (payload: Partial<{ title: string; content: string; status: string }>) => Promise<unknown> }) {
-  const [isEditing, setIsEditing] = useState(false);
+function SessionBlock({ block, imageUrl, onChange }: { block: SessionContentBlockRecord; imageUrl: string; onChange: (payload: Partial<{ title: string; content: string; status: string }>) => Promise<unknown> }) {
   const [title, setTitle] = useState(block.title || "");
   const [content, setContent] = useState(block.content || "");
 
+  useEffect(() => {
+    setTitle(block.title || "");
+    setContent(block.content || "");
+  }, [block.title, block.content]);
+
+  const saveContent = (nextContent: string) => {
+    setContent(nextContent);
+    if (nextContent !== (block.content || "")) {
+      onChange({ content: nextContent });
+    }
+  };
+
+  const saveTitle = (nextTitle: string) => {
+    setTitle(nextTitle);
+    if (nextTitle !== (block.title || "")) {
+      onChange({ title: nextTitle });
+    }
+  };
+
+  if (block.block_type === "trigger") {
+    return (
+      <section className="my-5">
+        <h3
+          className="text-xl font-semibold outline-none focus:bg-base-200"
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={(event) => saveTitle(event.currentTarget.innerText.trim())}
+        >
+          {title || "Triggered content"}
+        </h3>
+        <div
+          className="mt-2 whitespace-pre-wrap outline-none focus:bg-base-200"
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={(event) => saveContent(event.currentTarget.innerText.trim())}
+        >
+          {content}
+        </div>
+        {imageUrl ? <img src={imageUrl} alt="" className="mt-3 max-h-80 rounded-box object-contain" /> : null}
+        <button className="btn btn-ghost btn-xs mt-2 print:hidden" onClick={() => onChange({ status: "deleted" })}>Remove block</button>
+      </section>
+    );
+  }
+
   return (
-    <article className={`rounded-box border p-4 ${block.block_type === "trigger" ? "border-secondary/40 bg-secondary/10" : "border-base-300 bg-base-200/40"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          {block.block_type === "trigger" ? <span className="badge badge-secondary badge-sm">Trigger</span> : null}
-          {showTimestamps ? <span className="ml-2 text-xs text-base-content/50">{formatDate(block.created_at)}</span> : null}
-        </div>
-        <div className="flex gap-1">
-          <button className="btn btn-ghost btn-xs" onClick={() => setIsEditing(!isEditing)}>{isEditing ? "Done" : "Edit"}</button>
-          <button className="btn btn-ghost btn-xs" onClick={() => onChange({ status: "deleted" })}>Remove</button>
-        </div>
-      </div>
-      {isEditing ? (
-        <div className="mt-3 space-y-2">
-          <input className="input input-bordered input-sm w-full" value={title} onChange={(event) => setTitle(event.target.value)} />
-          <textarea className="textarea textarea-bordered min-h-24 w-full" value={content} onChange={(event) => setContent(event.target.value)} />
-          <button className="btn btn-primary btn-xs" onClick={() => onChange({ title, content }).then(() => setIsEditing(false))}>Save block</button>
-        </div>
-      ) : (
-        <div className="mt-3">
-          {block.title ? <h3 className="font-semibold">{block.title}</h3> : null}
-          {block.content ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{block.content}</p> : null}
-          {imageUrl ? <img src={imageUrl} alt="" className="mt-3 max-h-64 rounded-box border border-base-300 object-contain" /> : null}
-        </div>
-      )}
-    </article>
+    <p
+      className="mb-4 whitespace-pre-wrap outline-none focus:bg-base-200"
+      contentEditable
+      suppressContentEditableWarning
+      onBlur={(event) => saveContent(event.currentTarget.innerText.trim())}
+    >
+      {content}
+    </p>
   );
 }

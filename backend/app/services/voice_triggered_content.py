@@ -345,12 +345,15 @@ class VoiceTriggeredContentService:
 
     def append_transcript_segment(self, session_id: int, payload: TranscriptSegmentCreate) -> tuple[ListeningSession, TranscriptSegment, list[TriggerActivationEvent], list[SessionContentBlock]]:
         item = self.get_session_record(session_id)
+        cleaned_payload_text = self._clean_speech_text(payload.text)
+        if not cleaned_payload_text:
+            raise VoiceTriggeredContentError("No speech text to save.", status_code=422)
         blocks: list[SessionContentBlock] = []
         activations: list[TriggerActivationEvent] = []
         segment = TranscriptSegment(
             session_id=session_id,
             order_index=self._next_order(item),
-            text=payload.text,
+            text=cleaned_payload_text,
             start_timestamp_ms=payload.start_timestamp_ms,
             end_timestamp_ms=payload.end_timestamp_ms,
             is_final=payload.is_final,
@@ -364,14 +367,14 @@ class VoiceTriggeredContentService:
         cursor = 0
         matches: list[TriggerMatch] = []
         if payload.is_final and self._trigger_detection_enabled(item):
-            matches = TriggerMatcher(self._enabled_trigger_aliases()).match(payload.text)
+            matches = TriggerMatcher(self._enabled_trigger_aliases()).match(cleaned_payload_text)
 
         for match in matches:
             if match.start > cursor:
                 speech_block = self._add_or_merge_transcript_block(
                     item,
                     segment=segment,
-                    text=payload.text[cursor:match.start],
+                    text=cleaned_payload_text[cursor:match.start],
                 )
                 if speech_block:
                     blocks.append(speech_block)
@@ -418,17 +421,17 @@ class VoiceTriggeredContentService:
                 blocks.append(block)
                 activations.append(activation)
 
-        if cursor < len(payload.text):
+        if cursor < len(cleaned_payload_text):
             speech_block = self._add_or_merge_transcript_block(
                 item,
                 segment=segment,
-                text=payload.text[cursor:],
+                text=cleaned_payload_text[cursor:],
             )
             if speech_block:
                 blocks.append(speech_block)
 
         if not matches and not blocks:
-            speech_block = self._add_or_merge_transcript_block(item, segment=segment, text=payload.text)
+            speech_block = self._add_or_merge_transcript_block(item, segment=segment, text=cleaned_payload_text)
             if speech_block:
                 blocks.append(speech_block)
         item.transcript_text = "\n".join(segment.text for segment in self.list_segments(session_id))
@@ -482,6 +485,10 @@ class VoiceTriggeredContentService:
         cleaned = re.sub(r"\s+", " ", text).strip()
         cleaned = re.sub(r"^[\s,.;:!?-]+", "", cleaned)
         cleaned = re.sub(r"[\s,;:-]+$", "", cleaned)
+        if cleaned.casefold() in {"[blank_audio]", "[silence]", "(silence)", "silence", "[music]", "(music)"}:
+            return ""
+        if not re.search(r"[\w]", cleaned, flags=re.UNICODE):
+            return ""
         return cleaned.strip()
 
     @staticmethod

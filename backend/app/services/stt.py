@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import shutil
 from subprocess import run
 from uuid import uuid4
@@ -17,6 +18,28 @@ class SttUploadError(ValueError):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+NON_SPEECH_MARKERS = {
+    "[blank_audio]",
+    "[silence]",
+    "(silence)",
+    "silence",
+    "[music]",
+    "(music)",
+}
+
+
+def clean_transcription_text(value: str | None) -> str:
+    text = (value or "").strip()
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
+        return ""
+    if normalized.casefold() in NON_SPEECH_MARKERS:
+        return ""
+    if not re.search(r"[\w]", normalized, flags=re.UNICODE):
+        return ""
+    return normalized
 
 
 class SttService:
@@ -46,11 +69,17 @@ class SttService:
             if transcription_audio_path != destination_path:
                 transcription_audio_path.unlink(missing_ok=True)
 
+        transcript_text = clean_transcription_text(transcription.text)
+        if not transcript_text:
+            if not self.settings.keep_uploaded_audio_files:
+                destination_path.unlink(missing_ok=True)
+            raise SttUploadError("No speech detected in audio.", status_code=422)
+
         original_name = Path(upload_file.filename or destination_path.name).name
         transcript = TranscriptService(self.session).create_transcript(
             TranscriptCreate(
                 title=title or Path(original_name).stem,
-                transcript_text=transcription.text,
+                transcript_text=transcript_text,
                 source_audio_path=str(destination_path) if self.settings.keep_uploaded_audio_files else None,
                 source_audio_name=original_name,
                 language=language,

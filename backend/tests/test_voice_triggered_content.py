@@ -2,6 +2,7 @@ from sqlmodel import Session
 
 from app.core.config import get_settings
 from app.models.voice_triggered_content import TriggerActivationEvent, VoiceTriggerAsset, VoiceTriggerDefinition
+from app.services.stt import clean_transcription_text
 from app.services.voice_triggered_content import normalize_phrase
 
 
@@ -41,6 +42,56 @@ def test_trigger_crud_alias_matching_and_false_positive_prevention(client) -> No
     )
     assert no_match.status_code == 201
     assert len(no_match.json()["activations"]) == 0
+
+
+def test_blank_audio_markers_are_not_persisted(client) -> None:
+    session = client.post("/api/listen-commands/sessions", json={"title": "Silence", "status": "active"}).json()
+    response = client.post(
+        f"/api/listen-commands/sessions/{session['id']}/segments",
+        json={"text": "[BLANK_AUDIO]", "is_final": True, "source": "simulated"},
+    )
+
+    assert response.status_code == 422
+    reopened = client.get(f"/api/listen-commands/sessions/{session['id']}").json()
+    assert reopened["segments"] == []
+    assert reopened["blocks"] == []
+
+
+def test_stt_cleaner_removes_known_non_speech_markers() -> None:
+    assert clean_transcription_text("[BLANK_AUDIO]") == ""
+    assert clean_transcription_text("[SILENCE]") == ""
+    assert clean_transcription_text(" ... ") == ""
+    assert clean_transcription_text(" Sample sample. ") == "Sample sample."
+
+
+def test_command_phrase_is_replaced_inside_surrounding_speech(client) -> None:
+    client.post(
+        "/api/listen-commands/triggers",
+        json={
+            "primary_phrase": "Sample Sample",
+            "title": "Sample Sample",
+            "description": "This is the saved description for the Sample Sample command.",
+        },
+    )
+    session = client.post("/api/listen-commands/sessions", json={"title": "Live test", "status": "active"}).json()
+    response = client.post(
+        f"/api/listen-commands/sessions/{session['id']}/segments",
+        json={
+            "text": "This is the beginning of my test. Sample Sample. Now I am continuing after the command.",
+            "is_final": True,
+            "source": "simulated",
+        },
+    )
+
+    assert response.status_code == 201
+    blocks = response.json()["session"]["blocks"]
+    assert [block["block_type"] for block in blocks] == ["transcript", "trigger", "transcript"]
+    assert blocks[0]["content"] == "This is the beginning of my test."
+    assert blocks[1]["title"] == "Sample Sample"
+    assert blocks[1]["content"] == "This is the saved description for the Sample Sample command."
+    assert blocks[2]["content"] == "Now I am continuing after the command."
+    assert "Sample Sample" not in blocks[0]["content"]
+    assert "Sample Sample" not in blocks[2]["content"]
 
 
 def test_snapshots_survive_trigger_edits_and_delete(client) -> None:
