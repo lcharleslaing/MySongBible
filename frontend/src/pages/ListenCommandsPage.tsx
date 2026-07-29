@@ -55,10 +55,11 @@ type ConfirmDialog = {
   onConfirm: () => Promise<void>;
 };
 
-const silenceFinalizeMs = 950;
-const maxUtteranceMs = 12000;
+const silenceFinalizeMs = 550;
+const maxUtteranceMs = 5000;
 const preRollMs = 300;
 const speechRmsThreshold = 0.018;
+const retainedTailWords = 2;
 
 const blankTriggerForm: TriggerForm = {
   primary_phrase: "",
@@ -322,6 +323,21 @@ export function ListenCommandsPage() {
     }
   };
 
+  const syncSessionState = (session: ListeningSessionRecord) => {
+    currentSessionRef.current = session;
+    setCurrentSession(session);
+    setSessions((current) => {
+      const next = [session, ...current.filter((item) => item.id !== session.id)];
+      return next.sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
+    });
+    setIncompleteSessions((current) => {
+      const next = current.filter((item) => item.id !== session.id);
+      return ["active", "draft"].includes(session.status)
+        ? [session, ...next].sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())
+        : next;
+    });
+  };
+
   const enqueueChunk = (chunk: Blob) => {
     if (!chunk.size) {
       return;
@@ -451,12 +467,12 @@ export function ListenCommandsPage() {
       return combined;
     }
     const words = combined.split(/\s+/);
-    if (words.length <= 4) {
+    if (words.length <= retainedTailWords) {
       retainedTranscriptRef.current = combined;
       return "";
     }
-    retainedTranscriptRef.current = words.slice(-4).join(" ");
-    return words.slice(0, -4).join(" ");
+    retainedTranscriptRef.current = words.slice(-retainedTailWords).join(" ");
+    return words.slice(0, -retainedTailWords).join(" ");
   };
 
   const appendFinalizedText = async (session: ListeningSessionRecord, text: string, sourceTranscriptId: number | null) => {
@@ -465,8 +481,7 @@ export function ListenCommandsPage() {
       source: "whisper.cpp-live-chunk",
       source_transcript_id: sourceTranscriptId,
     });
-    currentSessionRef.current = result.session;
-    setCurrentSession(result.session);
+    syncSessionState(result.session);
   };
 
   const processChunkQueue = async () => {
@@ -554,8 +569,7 @@ export function ListenCommandsPage() {
             keep_trigger_words: settings.keep_trigger_words,
           },
         });
-    setCurrentSession(session);
-    currentSessionRef.current = session;
+    syncSessionState(session);
     await startAudioPipeline();
     setStatus("Listening live. Speech is transcribed and saved automatically.");
   }, "Could not start listening.");
@@ -564,11 +578,12 @@ export function ListenCommandsPage() {
     await stopAudioPipeline({ flush: true });
     await waitForSpeechQueue();
     await flushRetainedTranscript();
-    if (currentSession) {
-      setCurrentSession(await updateListeningSession(currentSession.id, { status: "stopped" }));
+    const session = currentSessionRef.current;
+    if (session) {
+      syncSessionState(await updateListeningSession(session.id, { status: "stopped" }));
     }
     setListeningState("Stopped");
-    setStatus("Listening stopped. Remaining speech will finish processing automatically.");
+    setStatus("Listening stopped and saved.");
   }, "Could not stop listening.");
 
   const pauseSession = () => run(async () => {
@@ -577,8 +592,9 @@ export function ListenCommandsPage() {
       setListeningState("Paused");
       await waitForSpeechQueue();
       await flushRetainedTranscript();
-      if (currentSession) {
-        setCurrentSession(await updateListeningSession(currentSession.id, { status: "draft" }));
+      const session = currentSessionRef.current;
+      if (session) {
+        syncSessionState(await updateListeningSession(session.id, { status: "draft" }));
       }
     }
   }, "Could not pause listening.");
@@ -586,16 +602,24 @@ export function ListenCommandsPage() {
   const resumeSession = () => run(async () => {
     if (listeningState === "Paused") {
       await startAudioPipeline();
-      if (currentSession) {
-        setCurrentSession(await updateListeningSession(currentSession.id, { status: "active" }));
+      const session = currentSessionRef.current;
+      if (session) {
+        syncSessionState(await updateListeningSession(session.id, { status: "active" }));
       }
     }
   }, "Could not resume listening.");
 
   const saveSession = () => run(async () => {
-    if (currentSession) {
-      setCurrentSession(await updateListeningSession(currentSession.id, { status: currentSession.status }));
-      setStatus("Session saved.");
+    if (isListeningRef.current) {
+      finalizeUtterance();
+    }
+    await waitForSpeechQueue();
+    await flushRetainedTranscript();
+    const session = currentSessionRef.current;
+    if (session) {
+      const saved = await updateListeningSession(session.id, { status: session.status });
+      syncSessionState(saved);
+      setStatus(`Session saved. ${saved.blocks.length} block${saved.blocks.length === 1 ? "" : "s"} currently in the document.`);
     }
   }, "Could not save session.");
 
