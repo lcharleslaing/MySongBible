@@ -555,7 +555,7 @@ class SettingsService:
         )
         next_content, database_count = re.subn(
             r'(?m)^(\s*)self\.database_url = f"sqlite:///.*"$',
-            rf'\1self.database_url = f"sqlite:///{{self.app_data_dir / \'database\' / \'{database_name}.sqlite3\'}}"',
+            lambda match: f'{match.group(1)}self.database_url = f"sqlite:///{{self.app_data_dir / \'database\' / \'{database_name}.sqlite3\'}}"',
             next_content,
             count=1,
         )

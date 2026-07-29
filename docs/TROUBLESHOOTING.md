@@ -41,7 +41,7 @@ Possible causes:
 
 - Electron could not start the backend child process
 - the backend virtualenv is missing dependencies
-- another process is already bound to port `8000`
+- an explicitly configured backend port is already in use (desktop app launches otherwise allocate a free local port automatically)
 
 Run the backend manually to isolate the problem:
 

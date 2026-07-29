@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const net = require("node:net");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
@@ -27,21 +28,28 @@ function appendLog(logPath, message) {
   fs.appendFileSync(logPath, message, "utf-8");
 }
 
-async function checkBackendHealth(healthUrl) {
-  try {
-    const response = await fetch(healthUrl);
-    if (!response.ok) {
-      return false;
-    }
-
-    const payload = await response.json();
-    return payload?.status === "ok" && payload?.app_name === "AppTemplateBase Backend";
-  } catch {
-    return false;
-  }
+function findAvailablePort(host) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", reject);
+    server.listen({ host, port: 0, exclusive: true }, () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : null;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else if (!port) {
+          reject(new Error("Could not determine the allocated backend port."));
+        } else {
+          resolve(port);
+        }
+      });
+    });
+  });
 }
 
-function startBackendProcess({ app, isDev }) {
+async function startBackendProcess({ app, isDev }) {
   const disabled = process.env.APP_DISABLE_BACKEND === "1";
   const logsDir = app.getPath("logs");
   const backendLogPath = path.join(logsDir, "backend.log");
@@ -65,7 +73,8 @@ function startBackendProcess({ app, isDev }) {
 
   const pythonBinary = fs.existsSync(venvPython) ? venvPython : "python3";
   const host = process.env.ELECTRON_BACKEND_HOST || "127.0.0.1";
-  const port = process.env.ELECTRON_BACKEND_PORT || "8000";
+  const configuredPort = process.env.ELECTRON_BACKEND_PORT || process.env.BACKEND_PORT;
+  const port = configuredPort || String(await findAvailablePort(host));
   const baseUrl = process.env.ELECTRON_BACKEND_BASE_URL || `http://${host}:${port}`;
   const appDataDir = process.env.APP_DATA_DIR || path.join(app.getPath("userData"), "data");
 
@@ -79,8 +88,6 @@ function startBackendProcess({ app, isDev }) {
   };
 
   appendLog(electronLogPath, `${new Date().toISOString()} Starting backend from ${backendDir} on ${baseUrl}.\n`);
-  let portConflictChecked = false;
-
   const child = spawn(
     pythonBinary,
     ["-m", "uvicorn", "app.main:app", "--host", host, "--port", port],
@@ -102,15 +109,10 @@ function startBackendProcess({ app, isDev }) {
     process.stderr.write(message);
     appendLog(backendLogPath, message);
 
-    if (!portConflictChecked && (message.includes("address already in use") || message.includes("EADDRINUSE"))) {
-      portConflictChecked = true;
-      void checkBackendHealth(process.env.ELECTRON_BACKEND_HEALTH_URL || `${baseUrl}/api/health`).then((isHealthy) => {
-        const note = isHealthy
-          ? `Port ${port} is already in use; reusing existing backend because ${baseUrl}/api/health matches this app.`
-          : `Port ${port} is already in use and ${baseUrl}/api/health did not match this app. This looks like a backend port conflict.`;
-        console.warn(note);
-        appendLog(electronLogPath, `${new Date().toISOString()} ${note}\n`);
-      });
+    if (message.includes("address already in use") || message.includes("EADDRINUSE")) {
+      const note = `Backend port ${port} became unavailable before startup completed. Restart this app to allocate another port.`;
+      console.warn(note);
+      appendLog(electronLogPath, `${new Date().toISOString()} ${note}\n`);
     }
   });
 
@@ -154,6 +156,7 @@ async function stopBackendProcess(controller) {
 }
 
 module.exports = {
+  findAvailablePort,
   startBackendProcess,
   stopBackendProcess,
 };

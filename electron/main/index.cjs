@@ -169,7 +169,7 @@ function createMainWindow() {
 async function bootstrap() {
   await app.whenReady();
 
-  backendController = startBackendProcess({
+  backendController = await startBackendProcess({
     app,
     isDev,
   });
