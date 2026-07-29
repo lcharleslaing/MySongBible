@@ -343,6 +343,17 @@ class VoiceTriggeredContentService:
         self.session.refresh(item)
         return item
 
+    def delete_session(self, session_id: int) -> None:
+        item = self.get_session_record(session_id)
+        for block in self.list_blocks(session_id):
+            self.session.delete(block)
+        for activation in self.list_activations(session_id):
+            self.session.delete(activation)
+        for segment in self.list_segments(session_id):
+            self.session.delete(segment)
+        self.session.delete(item)
+        self.session.commit()
+
     def append_transcript_segment(self, session_id: int, payload: TranscriptSegmentCreate) -> tuple[ListeningSession, TranscriptSegment, list[TriggerActivationEvent], list[SessionContentBlock]]:
         item = self.get_session_record(session_id)
         cleaned_payload_text = self._clean_speech_text(payload.text)

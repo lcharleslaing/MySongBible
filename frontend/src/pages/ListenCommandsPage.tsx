@@ -7,6 +7,7 @@ import {
   appendTranscriptSegment,
   buildVoiceTriggerAssetUrl,
   createListeningSession,
+  deleteListeningSession,
   createVoiceTrigger,
   deleteVoiceTrigger,
   duplicateVoiceTrigger,
@@ -595,12 +596,28 @@ export function ListenCommandsPage() {
     }
     await stopAudioPipeline({ flush: false });
     retainedTranscriptRef.current = "";
-    await updateListeningSession(currentSession.id, { status: "deleted" });
+    await deleteListeningSession(currentSession.id);
     setCurrentSession(null);
     currentSessionRef.current = null;
     setListeningState("Idle");
+    await loadData();
     setStatus("Session discarded.");
   }, "Could not discard session.");
+
+  const deleteSessionFromList = (session: ListeningSessionRecord) => run(async () => {
+    if (!window.confirm(`Delete "${session.title}"? This removes the session document, transcript segments, and command activation history.`)) {
+      return;
+    }
+    if (currentSession?.id === session.id) {
+      await stopAudioPipeline({ flush: false });
+      setCurrentSession(null);
+      currentSessionRef.current = null;
+      setListeningState("Idle");
+    }
+    await deleteListeningSession(session.id);
+    await loadData();
+    setStatus("Session deleted.");
+  }, "Could not delete session.");
 
   const saveTrigger = () => run(async () => {
     const saved = editingTrigger
@@ -786,15 +803,20 @@ export function ListenCommandsPage() {
       {activeTab === "sessions" ? (
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sessions.map((session) => (
-            <button key={session.id} className="rounded-box border border-base-300 bg-base-100 p-4 text-left hover:border-primary" onClick={() => { setCurrentSession(session); setActiveTab("listen"); }}>
+            <article key={session.id} className="rounded-box border border-base-300 bg-base-100 p-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold">{session.title}</h3>
                 <span className="badge badge-outline">{session.status}</span>
               </div>
               <p className="mt-2 text-sm text-base-content/60">{session.blocks.length} blocks, {session.activations.length} activations</p>
               <p className="mt-1 text-xs text-base-content/50">Updated {formatDate(session.updated_at)}</p>
-            </button>
+              <div className="mt-4 flex gap-2">
+                <button className="btn btn-primary btn-sm" onClick={() => { setCurrentSession(session); setActiveTab("listen"); }}>Open</button>
+                <button className="btn btn-error btn-outline btn-sm" onClick={() => deleteSessionFromList(session)}>Delete</button>
+              </div>
+            </article>
           ))}
+          {!sessions.length ? <p className="text-sm text-base-content/60">No saved sessions yet.</p> : null}
         </section>
       ) : null}
 

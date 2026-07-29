@@ -1,7 +1,7 @@
 from sqlmodel import Session
 
 from app.core.config import get_settings
-from app.models.voice_triggered_content import TriggerActivationEvent, VoiceTriggerAsset, VoiceTriggerDefinition
+from app.models.voice_triggered_content import SessionContentBlock, TranscriptSegment, TriggerActivationEvent, VoiceTriggerAsset, VoiceTriggerDefinition
 from app.services.stt import clean_transcription_text
 from app.services.voice_triggered_content import normalize_phrase
 
@@ -119,6 +119,27 @@ def test_snapshots_survive_trigger_edits_and_delete(client) -> None:
     assert delete_response.status_code == 204
     historical = client.get(f"/api/listen-commands/sessions/{session['id']}").json()
     assert historical["activations"][0]["snapshot_title"] == "Ace of Pentacles"
+
+
+def test_session_delete_removes_session_document_records(client) -> None:
+    client.post(
+        "/api/listen-commands/triggers",
+        json={"primary_phrase": "Sample Sample", "title": "Sample Sample", "description": "Saved content."},
+    )
+    session = client.post("/api/listen-commands/sessions", json={"title": "Delete me", "status": "active"}).json()
+    client.post(
+        f"/api/listen-commands/sessions/{session['id']}/segments",
+        json={"text": "Before Sample Sample after.", "is_final": True, "source": "simulated"},
+    )
+
+    response = client.delete(f"/api/listen-commands/sessions/{session['id']}")
+
+    assert response.status_code == 204
+    assert client.get(f"/api/listen-commands/sessions/{session['id']}").status_code == 404
+    with Session(client.engine) as db_session:
+        assert db_session.get(TranscriptSegment, 1) is None
+        assert db_session.get(SessionContentBlock, 1) is None
+        assert db_session.get(TriggerActivationEvent, 1) is None
 
 
 def test_interim_segments_do_not_activate_and_repeated_final_segments_respect_cooldown(client) -> None:

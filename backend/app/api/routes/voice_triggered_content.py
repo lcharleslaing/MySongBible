@@ -198,6 +198,18 @@ async def update_session(
         raise handle_error(error) from error
 
 
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_session(
+    session_id: int,
+    service: VoiceTriggeredContentService = Depends(get_service),
+) -> Response:
+    try:
+        service.delete_session(session_id)
+    except VoiceTriggeredContentError as error:
+        raise handle_error(error) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/sessions/{session_id}/segments", response_model=TranscriptAppendResponse, status_code=status.HTTP_201_CREATED)
 async def append_segment(
     session_id: int,

@@ -217,6 +217,15 @@ export async function updateListeningSession(sessionId: number, payload: Partial
   return parseJsonResponse<ListeningSessionRecord>(response);
 }
 
+export async function deleteListeningSession(sessionId: number) {
+  const response = await fetch(await buildApiUrl(`/api/listen-commands/sessions/${sessionId}`), {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    await parseJsonResponse(response);
+  }
+}
+
 export async function appendTranscriptSegment(sessionId: number, payload: { text: string; is_final?: boolean; source?: string; source_transcript_id?: number | null }) {
   const response = await fetch(await buildApiUrl(`/api/listen-commands/sessions/${sessionId}/segments`), {
     method: "POST",
