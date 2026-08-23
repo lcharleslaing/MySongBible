@@ -17,7 +17,7 @@
     "frontend"
   ],
   "scripts": {
-    "start": "export DISPLAY=:1 && node scripts/dev/bootstrap-start.cjs",
+    "start": "node scripts/dev/bootstrap-start.cjs",
     "start:bootstrap-only": "node scripts/dev/bootstrap-start.cjs --bootstrap-only",
     "template:init": "node scripts/template/init-template.cjs --force",
     "template:init:check": "node scripts/template/init-template.cjs --dry-run",

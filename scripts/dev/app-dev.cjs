@@ -1,4 +1,6 @@
 const net = require("node:net");
+const fs = require("node:fs");
+const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const isWindows = process.platform === "win32";
@@ -7,6 +9,91 @@ const frontendHost = "127.0.0.1";
 
 function log(message) {
   process.stdout.write(`[app:dev] ${message}\n`);
+}
+
+function displayFromSocketName(fileName) {
+  const match = /^X(\d+)$/.exec(fileName);
+  return match ? `:${match[1]}` : null;
+}
+
+function findOwnedXAuthority(display) {
+  const runtimeDir = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.()}`;
+  if (!runtimeDir || !fs.existsSync(runtimeDir)) {
+    return null;
+  }
+
+  const candidates = fs.readdirSync(runtimeDir)
+    .filter((fileName) => fileName.startsWith(".mutter-Xwaylandauth."))
+    .map((fileName) => path.join(runtimeDir, fileName))
+    .filter((candidate) => {
+      try {
+        return fs.statSync(candidate).uid === process.getuid?.();
+      } catch {
+        return false;
+      }
+    });
+
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  if (display && candidates.length > 0) {
+    return candidates.sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs)[0];
+  }
+
+  return null;
+}
+
+function detectDisplayEnv() {
+  if (process.platform !== "linux") {
+    return {};
+  }
+
+  const existingDisplay = process.env.DISPLAY;
+  const socketDir = "/tmp/.X11-unix";
+  if (!fs.existsSync(socketDir)) {
+    return {};
+  }
+
+  const uid = process.getuid?.();
+  const displays = fs.readdirSync(socketDir)
+    .map((fileName) => {
+      const display = displayFromSocketName(fileName);
+      if (!display) {
+        return null;
+      }
+
+      const socketPath = path.join(socketDir, fileName);
+      try {
+        const stats = fs.statSync(socketPath);
+        return { display, socketPath, owned: uid === undefined || stats.uid === uid, mtimeMs: stats.mtimeMs };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) => Number(right.owned) - Number(left.owned) || right.mtimeMs - left.mtimeMs);
+
+  const existingSocket = existingDisplay
+    ? displays.find((candidate) => candidate.display === existingDisplay)
+    : null;
+  const selected = existingSocket?.owned ? existingSocket : displays.find((candidate) => candidate.owned) || existingSocket;
+
+  if (!selected) {
+    return {};
+  }
+
+  const xAuthority = process.env.XAUTHORITY || findOwnedXAuthority(selected.display);
+  const detected = { DISPLAY: selected.display };
+  if (xAuthority) {
+    detected.XAUTHORITY = xAuthority;
+  }
+
+  if (selected.display !== existingDisplay) {
+    log(`Using detected desktop display ${selected.display}${xAuthority ? ` with ${xAuthority}` : ""}.`);
+  }
+
+  return detected;
 }
 
 function parsePort(value, fallback) {
@@ -148,6 +235,7 @@ async function main() {
     : `${rendererUrl},file://,null`;
   const env = {
     ...process.env,
+    ...detectDisplayEnv(),
     PORT: String(frontendPort),
     VITE_DEV_SERVER_PORT: String(frontendPort),
     VITE_API_BASE_URL: backendUrl,
