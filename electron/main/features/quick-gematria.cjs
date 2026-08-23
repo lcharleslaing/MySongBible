@@ -129,13 +129,27 @@ function registerQuickGematriaHotkey(options, accelerator = DEFAULT_HOTKEY) {
     globalShortcut.unregister(registeredHotkey);
   }
 
+  const sessionType = process.env.XDG_SESSION_TYPE || "";
+  const currentDesktop = process.env.XDG_CURRENT_DESKTOP || "";
+
+  console.log(`[Quick Gematria] Registering global shortcut: ${accelerator}`);
+  console.log(`[Quick Gematria] XDG_SESSION_TYPE: ${sessionType}`);
+  console.log(`[Quick Gematria] XDG_CURRENT_DESKTOP: ${currentDesktop}`);
+  console.log(`[Quick Gematria] WAYLAND_DISPLAY: ${process.env.WAYLAND_DISPLAY || ""}`);
+  console.log(`[Quick Gematria] DISPLAY: ${process.env.DISPLAY || ""}`);
+
   const ok = globalShortcut.register(accelerator, () => {
+    console.log("[Quick Gematria] Global hotkey pressed");
     showQuickGematria(options);
   });
+  const isRegistered = globalShortcut.isRegistered(accelerator);
+
+  console.log(`[Quick Gematria] register() returned: ${ok}`);
+  console.log(`[Quick Gematria] isRegistered(): ${isRegistered}`);
 
   if (!ok) {
     throw new Error(
-      `Could not register Quick Gematria global hotkey: ${accelerator}`,
+      `Could not register Quick Gematria global hotkey. requested accelerator: ${accelerator}; session type: ${sessionType || "(unset)"}; desktop environment: ${currentDesktop || "(unset)"}`,
     );
   }
 

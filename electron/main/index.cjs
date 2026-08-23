@@ -21,6 +21,13 @@ if (smokeMode || process.env.APP_TEMPLATE_DISABLE_CHROMIUM_SANDBOX === "1") {
   app.commandLine.appendSwitch("no-sandbox");
 }
 
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch(
+    "enable-features",
+    "GlobalShortcutsPortal",
+  );
+}
+
 if (process.env.APP_TEMPLATE_USER_DATA_DIR) {
   app.setPath("userData", path.resolve(process.env.APP_TEMPLATE_USER_DATA_DIR));
 }
@@ -203,7 +210,7 @@ async function bootstrap() {
   try {
     registerQuickGematriaHotkey(quickGematriaOptions, DEFAULT_HOTKEY);
   } catch (error) {
-    console.warn(error instanceof Error ? error.message : error);
+    console.error(error instanceof Error ? error.message : error);
   }
 
   if (!backgroundMode) {
