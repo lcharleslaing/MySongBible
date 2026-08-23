@@ -13,6 +13,56 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SONGS_IMPORT_PATH = PROJECT_ROOT / "songs-import.json"
 BACKUP_PATH = PROJECT_ROOT / "songs-import.before-vocabulary.json"
 TRANSCRIPT_PREFERENCE = ["txt", "lrc", "srt", "vtt", "json"]
+PLAIN_TEXT_KEYS = (
+    "txt",
+    "text",
+    "content",
+    "lyrics",
+    "lyric",
+    "transcript",
+    "transcription",
+    "plain_text",
+    "raw_text",
+)
+FORMAT_KEYS = ("format", "type", "source", "kind", "extension")
+TEXT_RECORD_KEYS = ("content", "text", "lyrics", "transcript", "transcription")
+JSON_SEQUENCE_KEYS = ("transcription", "segments", "phrases", "chunks", "words")
+METADATA_TEXT_KEYS = {
+    "destination_audio_name",
+    "engine",
+    "engine_version_target",
+    "file",
+    "filename",
+    "implementation",
+    "imported_at",
+    "language",
+    "manifest_file",
+    "model",
+    "output_file",
+    "output_safety_gain_db",
+    "path",
+    "phase",
+    "phase1_output",
+    "phase2_output",
+    "phase2_output_file",
+    "phase3_base",
+    "phase3_output",
+    "phase3_output_file",
+    "phase4_output",
+    "phase4_output_file",
+    "phase5_output_file",
+    "reference_file",
+    "relative_path",
+    "sha256",
+    "source_audio",
+    "source_instrumental",
+    "source_name",
+    "source_reference",
+    "source_residual",
+    "source_vocals",
+    "systeminfo",
+    "vocal_file",
+}
 
 APOSTROPHE_TRANSLATION = str.maketrans({
     "\u2018": "'",
@@ -119,53 +169,75 @@ def strip_vtt(text):
     return "\n".join(lines)
 
 
-def flatten_json_text(value):
+def text_from_records(records):
     chunks = []
 
-    def visit(node, key=None):
-        if isinstance(node, dict):
-            for child_key, child_value in node.items():
-                visit(child_value, child_key)
-            return
+    if not isinstance(records, list):
+        return ""
 
-        if isinstance(node, list):
-            for child in node:
-                visit(child, key)
-            return
+    for record in records:
+        if isinstance(record, dict):
+            for key in TEXT_RECORD_KEYS:
+                value = record.get(key)
+                if isinstance(value, str) and usable_text(clean_transcript_text(value)):
+                    chunks.append(value)
+                    break
+        elif isinstance(record, str) and usable_text(clean_transcript_text(record)):
+            chunks.append(record)
 
-        if isinstance(node, str):
-            if key and str(key).lower() in {
-                "systeminfo",
-                "model",
-                "filename",
-                "file",
-                "path",
-                "relative_path",
-                "language",
-            }:
-                return
-            if key is None or str(key).lower() in {
-                "text",
-                "transcript",
-                "transcription",
-                "sentence",
-                "line",
-                "lyrics",
-            }:
-                chunks.append(node)
-
-    visit(value)
     return "\n".join(chunks)
+
+
+def json_text_candidates(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            yield value
+            return
+
+    if isinstance(value, dict):
+        for key in PLAIN_TEXT_KEYS:
+            direct = value.get(key)
+            if isinstance(direct, str):
+                yield direct
+
+        for key in JSON_SEQUENCE_KEYS:
+            text = text_from_records(value.get(key))
+            if text:
+                yield text
+
+        # Some transcript exports wrap the useful object one level down.
+        for child_key, child_value in value.items():
+            if str(child_key).lower() in METADATA_TEXT_KEYS:
+                continue
+            if isinstance(child_value, dict):
+                yield from json_text_candidates(child_value)
+        return
+
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, dict):
+                for key in PLAIN_TEXT_KEYS:
+                    direct = item.get(key)
+                    if isinstance(direct, str):
+                        yield direct
+
+                for key in JSON_SEQUENCE_KEYS:
+                    text = text_from_records(item.get(key))
+                    if text:
+                        yield text
+            elif isinstance(item, str):
+                yield item
 
 
 def transcript_text_for_source(source, value):
     if source == "json":
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except json.JSONDecodeError:
-                return value
-        return flatten_json_text(value)
+        for candidate in json_text_candidates(value):
+            text = usable_text(clean_transcript_text(candidate))
+            if text:
+                return text
+        return ""
 
     if not isinstance(value, str):
         return ""
@@ -179,24 +251,85 @@ def transcript_text_for_source(source, value):
     return value
 
 
-def choose_canonical_transcript(song):
+def source_from_record(record):
+    if not isinstance(record, dict):
+        return None, None
+
+    raw_format = None
+    for key in FORMAT_KEYS:
+        if isinstance(record.get(key), str):
+            raw_format = record[key].lower().lstrip(".")
+            break
+
+    for key in TEXT_RECORD_KEYS:
+        value = record.get(key)
+        if isinstance(value, str):
+            source = raw_format if raw_format in TRANSCRIPT_PREFERENCE else "txt"
+            return source, value
+
+    for key in TRANSCRIPT_PREFERENCE:
+        if key in record:
+            return key, record[key]
+
+    return None, None
+
+
+def transcript_candidates(song):
     transcripts = song.get("transcripts")
-    if not isinstance(transcripts, dict):
-        return None, ""
+
+    if isinstance(transcripts, dict):
+        for source in TRANSCRIPT_PREFERENCE:
+            if source not in transcripts:
+                continue
+
+            value = transcripts[source]
+            candidates = value if isinstance(value, list) and source != "json" else [value]
+
+            for candidate in candidates:
+                yield source, candidate
+
+        for key in PLAIN_TEXT_KEYS:
+            value = transcripts.get(key)
+            if isinstance(value, str):
+                yield "txt", value
+
+    elif isinstance(transcripts, list):
+        records_by_source = {source: [] for source in TRANSCRIPT_PREFERENCE}
+
+        for record in transcripts:
+            source, value = source_from_record(record)
+            if source in records_by_source:
+                records_by_source[source].append(value)
+
+        for source in TRANSCRIPT_PREFERENCE:
+            for value in records_by_source[source]:
+                yield source, value
+
+    elif isinstance(transcripts, str):
+        yield "txt", transcripts
 
     for source in TRANSCRIPT_PREFERENCE:
-        if source not in transcripts:
-            continue
+        value = song.get(source)
+        if isinstance(value, str):
+            yield source, value
 
-        value = transcripts[source]
-        candidates = value if isinstance(value, list) and source != "json" else [value]
+    for key in ("lyrics", "lyric", "transcript", "transcription", "plain_text", "raw_text"):
+        value = song.get(key)
+        if isinstance(value, str):
+            yield "txt", value
 
-        for candidate in candidates:
-            text = usable_text(clean_transcript_text(transcript_text_for_source(source, candidate)))
-            if text:
-                return source, text
+
+def choose_canonical_transcript(song):
+    for source, candidate in transcript_candidates(song):
+        text = usable_text(clean_transcript_text(transcript_text_for_source(source, candidate)))
+        if text:
+            return source, text
 
     return None, ""
+
+
+def canonical_lyrics(song):
+    return choose_canonical_transcript(song)
 
 
 def ordered_frequency(tokens):
