@@ -5,8 +5,8 @@ Use this when validating that ignored local files are not hiding setup problems.
 ## Fresh Setup
 
 ```bash
-git clone <repo-url> AppTemplateBase-clean
-cd AppTemplateBase-clean
+git clone <repo-url> MySongBible-clean
+cd MySongBible-clean
 cp backend/.env.example backend/.env
 npm install
 npm run start:bootstrap-only

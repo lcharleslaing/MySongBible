@@ -1,6 +1,6 @@
 # Local TTS Integration
 
-AppTemplateBase uses a pluggable, local-only text-to-speech architecture. The template works out of the box with Mock TTS, and it can be moved to real local Piper TTS after you configure Piper and download a Piper voice model.
+My Song Bible uses a pluggable, local-only text-to-speech architecture. The app works out of the box with Mock TTS, and it can be moved to real local Piper TTS after you configure Piper and download a Piper voice model.
 
 The backend Python dependencies include the `piper-tts` package, which provides a local `piper` CLI in the backend virtualenv. The app does not download Piper voice models automatically.
 
@@ -28,7 +28,7 @@ Piper is the current real local text-to-speech engine.
 - is selected with `TTS_ENGINE=piper` or through Settings
 - fails clearly when its binary or model path is missing
 
-Piper must be configured manually in either `backend/.env` or the Settings page. The template will not guess voice model paths or download models.
+Piper must be configured manually in either `backend/.env` or the Settings page. The app will not guess voice model paths or download models.
 
 ### Future Voice Cloning Engines
 
@@ -52,7 +52,7 @@ Piper example:
 
 ```env
 TTS_ENGINE=piper
-PIPER_BINARY=/home/llaing/Programming/AppTemplateBase/backend/.venv/bin/piper
+PIPER_BINARY=/home/llaing/Programming/MySongBible/backend/.venv/bin/piper
 PIPER_MODEL_PATH=/path/to/voice-model.onnx
 TTS_OUTPUT_DIR=backend/data/audio/tts
 TTS_TIMEOUT_SECONDS=60
@@ -71,7 +71,7 @@ You can keep local AI voice models outside the repository. This is only a conven
 Example paths might then look like:
 
 ```env
-PIPER_BINARY=/home/llaing/Programming/AppTemplateBase/backend/.venv/bin/piper
+PIPER_BINARY=/home/llaing/Programming/MySongBible/backend/.venv/bin/piper
 PIPER_MODEL_PATH=/home/llaing/local-ai/piper/models/en_US-lessac-medium.onnx
 ```
 

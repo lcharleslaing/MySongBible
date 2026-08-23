@@ -34,7 +34,7 @@ const themes = [
   "nord",
   "sunset",
 ] as const;
-const storageKey = "apptemplatebase-theme";
+const storageKey = "my-song-bible-theme";
 
 function formatThemeLabel(theme: string) {
   return theme

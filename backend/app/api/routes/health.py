@@ -29,9 +29,9 @@ async def get_health(
     piper_model = settings.piper_model_path
     return HealthResponse(
         status="ok" if database_ok else "degraded",
-        app_name="VideoShareApp",
+        app_name="My Song Bible",
         backend_version="0.1.0",
-        identity="com.localfirst.videoshareapp.backend",
+        identity="com.localfirst.my.song.bible.backend",
         runtime_directory=str(settings.app_data_dir),
         database={"ready": database_ok, "path": settings.database_url.removeprefix("sqlite:///"), "error": database_error},
         whisper={"configured": bool(whisper_binary and whisper_model), "ready": bool(whisper_binary and whisper_binary.is_file() and os.access(whisper_binary, os.X_OK) and whisper_model and whisper_model.is_file())},
@@ -42,4 +42,4 @@ async def get_health(
 
 @router.get("/identity")
 async def get_identity() -> dict[str, str]:
-    return {"app_name": "VideoShareApp", "identity": "com.localfirst.videoshareapp.backend", "backend_version": "0.1.0"}
+    return {"app_name": "My Song Bible", "identity": "com.localfirst.my.song.bible.backend", "backend_version": "0.1.0"}

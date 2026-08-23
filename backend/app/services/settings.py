@@ -39,26 +39,26 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
 
 APP_DEFINITION_DEFAULTS = {
-    "package_name": "apptemplatebase",
+    "package_name": "my-song-bible",
     "app_version": "0.1.0",
-    "app_display_name": "AppTemplateBase",
+    "app_display_name": "My Song Bible",
     "sidebar_show_icon": True,
     "sidebar_show_eyebrow": True,
     "sidebar_show_title": True,
     "sidebar_show_description": True,
-    "sidebar_eyebrow": "AppTemplateBase",
-    "sidebar_title": "Desktop Starter",
-    "sidebar_description": "Local-first shell for voice-enabled desktop apps.",
+    "sidebar_eyebrow": "My Song Bible",
+    "sidebar_title": "Song Workspace",
+    "sidebar_description": "Local-first workspace for songs, voice notes, and creative study.",
     "topbar_show_eyebrow": True,
     "topbar_show_title": True,
     "topbar_eyebrow": "Local-First Workspace",
-    "topbar_title": "Frontend Starter",
+    "topbar_title": "My Song Bible",
     "home_show_eyebrow": True,
     "home_show_title": True,
     "home_show_description": True,
     "home_eyebrow": "Overview",
-    "home_title": "Reusable local-first desktop starter",
-    "home_description": "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
+    "home_title": "My Song Bible",
+    "home_description": "A local-first workspace for capturing, reviewing, and organizing song ideas with voice-enabled tools.",
 }
 
 HOME_PAGE_DEFAULTS = {
@@ -75,7 +75,7 @@ HOME_PAGE_DEFAULTS = {
 }
 
 DEVICE_PROFILE_PREFIX = "device_profile."
-DEVICE_PROFILE_FILE = Path.home() / ".config" / "apptemplatebase" / "device-profiles.json"
+DEVICE_PROFILE_FILE = Path.home() / ".config" / "My Song Bible" / "device-profiles.json"
 
 
 class SettingsService:

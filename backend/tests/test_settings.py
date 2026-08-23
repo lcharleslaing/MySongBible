@@ -74,4 +74,4 @@ def test_settings_loads_csv_list_values_from_env_file(tmp_path) -> None:
 def test_settings_resolves_repo_backend_relative_paths() -> None:
     settings = Settings(tts_output_dir="backend/data/audio/tts")
 
-    assert str(settings.tts_output_dir).endswith("AppTemplateBase/backend/data/audio/tts")
+    assert str(settings.tts_output_dir).endswith("MySongBible/backend/data/audio/tts")

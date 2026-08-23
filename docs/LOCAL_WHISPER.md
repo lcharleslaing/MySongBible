@@ -1,6 +1,6 @@
 # Local Whisper Integration
 
-AppTemplateBase uses `whisper.cpp` as a local speech-to-text backend.
+My Song Bible uses `whisper.cpp` as a local speech-to-text backend.
 
 ## Environment Variables
 

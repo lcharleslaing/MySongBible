@@ -9,6 +9,8 @@ from app.services.settings import SettingsService
 
 
 def test_settings_can_be_updated_and_reloaded(client) -> None:
+    settings = Settings()
+    sqlite_database_path = str(settings.app_data_dir / "database" / "my_song_bible.sqlite3")
     update_response = client.put(
         "/api/settings",
         json={
@@ -21,7 +23,7 @@ def test_settings_can_be_updated_and_reloaded(client) -> None:
             "audio_input_dir": "/tmp/audio-input",
             "tts_output_dir": "/tmp/audio-output",
             "tts_timeout_seconds": 30,
-            "sqlite_database_path": "./data/app_template_base.sqlite3",
+            "sqlite_database_path": sqlite_database_path,
         },
     )
     assert update_response.status_code == 200
@@ -36,8 +38,8 @@ def test_settings_can_be_updated_and_reloaded(client) -> None:
     assert payload["audio_input_dir"] == "/tmp/audio-input"
     assert payload["tts_output_dir"] == "/tmp/audio-output"
     assert payload["tts_timeout_seconds"] == 30
-    assert payload["sqlite_database_path"] == "./data/app_template_base.sqlite3"
-    assert payload["database_url"] == "sqlite:///./data/app_template_base.sqlite3"
+    assert payload["sqlite_database_path"] == sqlite_database_path
+    assert payload["database_url"] == f"sqlite:///{sqlite_database_path}"
 
     get_response = client.get("/api/settings")
     assert get_response.status_code == 200

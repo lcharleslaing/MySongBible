@@ -83,7 +83,7 @@ async function startBackendProcess({ app, isDev }) {
     BACKEND_HOST: process.env.BACKEND_HOST || host,
     BACKEND_PORT: process.env.BACKEND_PORT || port,
     APP_DATA_DIR: appDataDir,
-    DATABASE_URL: process.env.DATABASE_URL || (isDev ? undefined : `sqlite:///${path.join(appDataDir, "app_template_base.sqlite3")}`),
+    DATABASE_URL: process.env.DATABASE_URL || (isDev ? undefined : `sqlite:///${path.join(appDataDir, "my_song_bible.sqlite3")}`),
     LOG_DIR: process.env.LOG_DIR || logsDir,
   };
 

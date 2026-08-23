@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "apptemplatebase-backend"
+name = "my-song-bible-backend"
 version = "0.1.0"
-description = "Local FastAPI backend for AppTemplateBase"
+description = "Local FastAPI backend for My Song Bible"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -218,7 +218,7 @@ class AppCloneRunner:
         )
 
     def _build_runtime_settings(self, clone_path: Path) -> dict[str, Path | int | str]:
-        runtime_dir = clone_path / ".apptemplatebase-runtime"
+        runtime_dir = clone_path / ".my-song-bible-runtime"
         app_data_dir = runtime_dir / "backend-data"
         user_data_dir = runtime_dir / "electron-user-data"
         backend_port = self._find_available_port()
@@ -227,7 +227,7 @@ class AppCloneRunner:
             "runtime_dir": runtime_dir,
             "app_data_dir": app_data_dir,
             "user_data_dir": user_data_dir,
-            "database_url": f"sqlite:///{app_data_dir / 'app_template_base.sqlite3'}",
+            "database_url": f"sqlite:///{app_data_dir / 'my_song_bible.sqlite3'}",
             "backend_port": backend_port,
             "frontend_port": frontend_port,
         }
@@ -261,9 +261,9 @@ class AppCloneRunner:
         if not exclude_path.exists():
             return
         content = exclude_path.read_text(encoding="utf-8")
-        if ".apptemplatebase-runtime/" in content:
+        if ".my-song-bible-runtime/" in content:
             return
-        exclude_path.write_text(f"{content.rstrip()}\n.apptemplatebase-runtime/\n", encoding="utf-8")
+        exclude_path.write_text(f"{content.rstrip()}\n.my-song-bible-runtime/\n", encoding="utf-8")
 
     def _find_available_port(self, *, exclude: set[int] | None = None) -> int:
         excluded = exclude or set()

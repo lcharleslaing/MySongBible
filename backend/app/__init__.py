@@ -1,1 +1,1 @@
-"""AppTemplateBase backend package."""
+"""My Song Bible backend package."""

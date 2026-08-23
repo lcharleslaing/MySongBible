@@ -31,7 +31,7 @@ def test_app_cloner_defaults_use_package_repository_url(client, tmp_path: Path) 
     response = client.get("/api/app-cloner/defaults")
 
     assert response.status_code == 200
-    assert response.json()["repo_url"] == "https://github.com/lcharleslaing/AppTemplateBase.git"
+    assert response.json()["repo_url"] == "https://github.com/lcharleslaing/MySongBible.git"
 
 
 def test_app_cloner_rejects_missing_destination(client, tmp_path: Path) -> None:
@@ -94,8 +94,8 @@ def test_app_cloner_runs_git_clone_and_npm_start(client, tmp_path: Path, monkeyp
     assert status["clone_path"] == str(destination / "my-app")
     assert status["backend_port"] == 19001
     assert status["frontend_port"] == 19002
-    assert status["app_data_dir"] == str(destination / "my-app" / ".apptemplatebase-runtime" / "backend-data")
-    assert status["user_data_dir"] == str(destination / "my-app" / ".apptemplatebase-runtime" / "electron-user-data")
+    assert status["app_data_dir"] == str(destination / "my-app" / ".my-song-bible-runtime" / "backend-data")
+    assert status["user_data_dir"] == str(destination / "my-app" / ".my-song-bible-runtime" / "electron-user-data")
     assert ("run", ["git", "clone", "https://github.com/example/app.git", str(destination / "my-app")], str(destination)) in calls
     assert ("popen", ["npm", "start"], str(destination / "my-app")) in calls
     assert launched_env["VITE_DEV_SERVER_PORT"] == str(status["frontend_port"])
@@ -104,7 +104,7 @@ def test_app_cloner_runs_git_clone_and_npm_start(client, tmp_path: Path, monkeyp
     assert launched_env["BACKEND_PORT"] == str(status["backend_port"])
     assert launched_env["ELECTRON_BACKEND_BASE_URL"] == f"http://127.0.0.1:{status['backend_port']}"
     assert launched_env["APP_DATA_DIR"] == status["app_data_dir"]
-    assert launched_env["DATABASE_URL"] == f"sqlite:///{status['app_data_dir']}/app_template_base.sqlite3"
+    assert launched_env["DATABASE_URL"] == f"sqlite:///{status['app_data_dir']}/my_song_bible.sqlite3"
     assert launched_env["APP_TEMPLATE_USER_DATA_DIR"] == status["user_data_dir"]
 
 

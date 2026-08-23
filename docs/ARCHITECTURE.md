@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AppTemplateBase is a local-first desktop application template intended to serve as a reusable base for future projects.
+My Song Bible is a local-first desktop application built from App Template Base and intended to keep the template architecture easy to merge from upstream.
 
 ## High-Level Structure
 

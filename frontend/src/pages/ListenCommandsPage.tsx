@@ -813,7 +813,7 @@ export function ListenCommandsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AppTemplateBase"
+        eyebrow="My Song Bible"
         title="Listen Commands"
         description="Record locally, transcribe with the existing local STT backend, and persist trigger activations into SQLite."
       />

@@ -8,7 +8,7 @@ from app.core.runtime_paths import default_runtime_root
 
 
 class Settings(BaseSettings):
-    app_name: str = "VideoShareApp"
+    app_name: str = "My Song Bible"
     app_env: str = "development"
     log_level: str = "INFO"
     log_dir: Path | None = None
@@ -174,7 +174,7 @@ class Settings(BaseSettings):
     def model_post_init(self, __context: object) -> None:
         self.app_data_dir = self.app_data_dir.expanduser().resolve()
         if not self.database_url:
-            self.database_url = f"sqlite:///{self.app_data_dir / 'database' / 'videoshareapp.sqlite3'}"
+            self.database_url = f"sqlite:///{self.app_data_dir / 'database' / 'my_song_bible.sqlite3'}"
         if self.log_dir is None:
             self.log_dir = self.app_data_dir / "logs"
 

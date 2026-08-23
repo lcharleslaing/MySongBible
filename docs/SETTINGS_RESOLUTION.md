@@ -1,6 +1,6 @@
 # Settings Resolution
 
-AppTemplateBase resolves editable local settings in two layers:
+My Song Bible resolves editable local settings in two layers:
 
 ## 1. Environment Defaults
 

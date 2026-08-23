@@ -121,7 +121,7 @@ Useful variables:
 
 ```env
 APP_DATA_DIR=./data
-DATABASE_URL=sqlite:///./data/app_template_base.sqlite3
+DATABASE_URL=sqlite:///./data/my_song_bible.sqlite3
 WHISPER_CPP_BINARY=/absolute/path/to/whisper-cli
 WHISPER_MODEL_PATH=/absolute/path/to/ggml-base.en.bin
 WHISPER_THREAD_COUNT=4

@@ -9,7 +9,7 @@ from app.services.app_lock import app_lock_service
 
 @pytest.fixture(autouse=True)
 def isolated_lock(tmp_path, monkeypatch):
-    app_data = tmp_path / "user-config" / "VideoShareApp"
+    app_data = tmp_path / "user-config" / "My Song Bible"
     monkeypatch.setattr(app_lock_module, "get_settings", lambda: SimpleNamespace(app_data_dir=app_data))
     app_lock_service.reset_session()
     yield app_data

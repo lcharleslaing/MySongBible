@@ -1,6 +1,6 @@
-# App Template Base
+# My Song Bible
 
-AppTemplateBase is a reusable local-first desktop application template for building future apps with a consistent architecture.
+My Song Bible is a local-first desktop application built from App Template Base. It keeps the Electron, React, FastAPI, SQLite, and local voice tooling foundation while giving this clone its own application identity.
 
 ## Stack
 
@@ -18,7 +18,7 @@ AppTemplateBase is a reusable local-first desktop application template for build
 - Keep all core functionality local-first.
 - Avoid cloud speech services.
 - Centralize STT/TTS logic in reusable local voice modules.
-- Provide a clean base structure for future desktop products.
+- Provide a local workspace for song ideas, voice notes, and creative study.
 - Keep machine-specific paths configurable through environment variables and saved local settings.
 
 ## Repository Layout
@@ -46,7 +46,7 @@ AppTemplateBase is a reusable local-first desktop application template for build
 
 From the repository root:
 
-- `npm start` runs one-time template initialization, prepares `backend/.env`, bootstraps missing dependencies, then runs the full desktop app in development mode
+- `npm start` prepares `backend/.env`, bootstraps missing dependencies, checks for upstream template updates, then runs the full desktop app in development mode
 - `npm run start:bootstrap-only` performs first-run setup checks without launching the app
 - `npm run template:init` forces the template identity/default-path setup to run again
 - `npm run setup:local-ai` sets up local Whisper and Piper assets under `~/local-ai` and updates `backend/.env`
@@ -71,12 +71,14 @@ From `backend/`:
 - `uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload`
 - `pytest`
 
-## First-Run Template Initialization
+## Template Relationship
 
-On first `npm start`, the template initializer:
+This repository is an independent My Song Bible app. Keep `origin` pointed at the My Song Bible repository and `upstream` pointed at App Template Base so template improvements can be reviewed and merged later.
+
+On first `npm start`, the inherited template initializer:
 
 - detects the current folder name
-- updates safe identity fields only if they still contain the template identity
+- updates safe identity fields only if they still contain the original template identity
 - writes an ignored `.app-template-state.json` marker so later starts skip identity setup
 - creates `backend/.env` from `backend/.env.example` when missing
 - writes local Whisper defaults to `backend/.env` when values are blank or still generic

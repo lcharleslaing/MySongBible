@@ -3,26 +3,26 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { getSettings, type AppDefinitionRecord, type HomePageSettingsRecord } from "../api/settings";
 
 const defaultAppDefinition: AppDefinitionRecord = {
-  package_name: "apptemplatebase",
+  package_name: "my-song-bible",
   app_version: "0.1.0",
-  app_display_name: "AppTemplateBase",
+  app_display_name: "My Song Bible",
   sidebar_show_icon: true,
   sidebar_show_eyebrow: true,
   sidebar_show_title: true,
   sidebar_show_description: true,
-  sidebar_eyebrow: "AppTemplateBase",
-  sidebar_title: "Desktop Starter",
-  sidebar_description: "Local-first shell for voice-enabled desktop apps.",
+  sidebar_eyebrow: "My Song Bible",
+  sidebar_title: "Song Workspace",
+  sidebar_description: "Local-first workspace for songs, voice notes, and creative study.",
   topbar_show_eyebrow: true,
   topbar_show_title: true,
   topbar_eyebrow: "Local-First Workspace",
-  topbar_title: "Frontend Starter",
+  topbar_title: "My Song Bible",
   home_show_eyebrow: true,
   home_show_title: true,
   home_show_description: true,
   home_eyebrow: "Overview",
-  home_title: "Reusable local-first desktop starter",
-  home_description: "This frontend is a clean launch surface for future desktop apps built on Electron, React, FastAPI, SQLite, and local voice tooling.",
+  home_title: "My Song Bible",
+  home_description: "A local-first workspace for capturing, reviewing, and organizing song ideas with voice-enabled tools.",
 };
 
 export const defaultHomePageSettings: HomePageSettingsRecord = {

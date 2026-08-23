@@ -1,6 +1,6 @@
 # Documentation
 
-This directory contains project-level documentation for AppTemplateBase.
+This directory contains project-level documentation for My Song Bible and its inherited App Template Base tooling.
 
 Current docs cover:
 

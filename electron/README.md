@@ -1,6 +1,6 @@
 # Electron Layer
 
-This directory contains the desktop wrapper for AppTemplateBase.
+This directory contains the desktop wrapper for My Song Bible.
 
 ## Current Scope
 

@@ -592,9 +592,9 @@ function getPackageArtifacts() {
 function getPackageName() {
   try {
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
-    return packageJson.name || "apptemplatebase";
+    return packageJson.name || "my-song-bible";
   } catch {
-    return "apptemplatebase";
+    return "my-song-bible";
   }
 }
 

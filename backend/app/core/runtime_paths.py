@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 
-APP_DIRECTORY_NAME = "VideoShareApp"
+APP_DIRECTORY_NAME = "My Song Bible"
 
 
 def default_runtime_root() -> Path:
