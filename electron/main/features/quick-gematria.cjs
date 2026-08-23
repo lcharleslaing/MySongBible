@@ -18,6 +18,7 @@ const {
 const DEFAULT_HOTKEY = "CommandOrControl+Alt+G";
 const QUICK_WINDOW_LABEL = "quick-gematria";
 const MUSIC_WHISPER_BASE_URL = "http://127.0.0.1:8091";
+const MIN_AUDIO_BYTES = 512;
 
 let quickWindow = null;
 let registeredHotkey = null;
@@ -204,6 +205,26 @@ function extractTextFromWhisperResponse(payload) {
   return "";
 }
 
+function normalizeAudioBuffer(audioBytes) {
+  if (Buffer.isBuffer(audioBytes)) {
+    return audioBytes;
+  }
+
+  if (audioBytes instanceof ArrayBuffer) {
+    return Buffer.from(audioBytes);
+  }
+
+  if (ArrayBuffer.isView(audioBytes)) {
+    return Buffer.from(audioBytes.buffer, audioBytes.byteOffset, audioBytes.byteLength);
+  }
+
+  if (Array.isArray(audioBytes)) {
+    return Buffer.from(audioBytes);
+  }
+
+  return Buffer.alloc(0);
+}
+
 async function transcribeWithMusicWhisper({ audioBytes, mimeType }) {
   const tempDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "my-song-bible-gematria-"),
@@ -216,9 +237,11 @@ async function transcribeWithMusicWhisper({ audioBytes, mimeType }) {
     );
     const wavPath = path.join(tempDir, "capture.wav");
 
-    const buffer = Buffer.isBuffer(audioBytes)
-      ? audioBytes
-      : Buffer.from(audioBytes);
+    const buffer = normalizeAudioBuffer(audioBytes);
+
+    if (buffer.length < MIN_AUDIO_BYTES) {
+      throw new Error("No usable audio was captured before transcription.");
+    }
 
     await fs.writeFile(inputPath, buffer);
 

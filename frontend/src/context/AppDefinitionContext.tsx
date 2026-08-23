@@ -31,6 +31,7 @@ export const defaultHomePageSettings: HomePageSettingsRecord = {
   marketing_title: "Everything you need, right where you left it.",
   marketing_description: "A private, local-first workspace that brings your everyday tools together without getting in the way.",
   apps: [
+    { id: "quick-gematria", label: "Quick Gematria", description: "Calculate Jewish, English, and Simple values for spoken or typed phrases.", path: "/quick-gematria", badge: "Gematria", icon: "calculator" },
     { id: "audio-journal", label: "Audio Journal", description: "Record, review, and organize spoken notes.", path: "/audio-journal", badge: "Capture", icon: "mic" },
     { id: "listen-commands", label: "Listen Commands", description: "Log content blocks from local voice commands.", path: "/listen-commands", badge: "Listen", icon: "spark" },
     { id: "settings", label: "Settings", description: "Personalize the app and configure this device.", path: "/settings", badge: "Configure", icon: "settings" },

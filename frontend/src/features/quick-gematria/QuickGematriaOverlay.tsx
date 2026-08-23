@@ -7,6 +7,13 @@ import type {
 const SPEECH_THRESHOLD = 0.025;
 const SILENCE_AFTER_SPEECH_MS = 1200;
 const MAX_RECORDING_MS = 15000;
+const MIN_AUDIO_BYTES = 512;
+const RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/mp4",
+];
 
 function desktopApi(): QuickGematriaDesktopApi | undefined {
   return (window as typeof window & {
@@ -14,7 +21,21 @@ function desktopApi(): QuickGematriaDesktopApi | undefined {
   }).quickGematria;
 }
 
-export default function QuickGematriaOverlay() {
+function supportedRecorderMimeType() {
+  return RECORDER_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
+}
+
+type QuickGematriaOverlayProps = {
+  autoStart?: boolean;
+  hideOnEscape?: boolean;
+  variant?: "popup" | "embedded";
+};
+
+export default function QuickGematriaOverlay({
+  autoStart = true,
+  hideOnEscape = true,
+  variant = "popup",
+}: QuickGematriaOverlayProps) {
   const [text, setText] = useState("");
   const [result, setResult] = useState<GematriaResult | null>(null);
   const [status, setStatus] = useState("Ready");
@@ -22,11 +43,15 @@ export default function QuickGematriaOverlay() {
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const frameRef = useRef<number | null>(null);
   const startedRef = useRef(0);
   const speechHeardRef = useRef(false);
   const lastSpeechRef = useRef(0);
+  const isStartingRef = useRef(false);
+  const isRecordingRef = useRef(false);
+  const recordingSessionRef = useRef(0);
 
   const calculate = useCallback(async (value: string) => {
     const api = desktopApi();
@@ -59,6 +84,11 @@ export default function QuickGematriaOverlay() {
       frameRef.current = null;
     }
 
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      void audioContextRef.current.close();
+    }
+    audioContextRef.current = null;
+
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
@@ -66,6 +96,9 @@ export default function QuickGematriaOverlay() {
   const finishRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") {
+      if (recorder.state === "recording") {
+        recorder.requestData();
+      }
       recorder.stop();
     }
   }, []);
@@ -78,7 +111,13 @@ export default function QuickGematriaOverlay() {
       return;
     }
 
-    stopMedia();
+    if (isStartingRef.current || isRecordingRef.current) {
+      return;
+    }
+
+    isStartingRef.current = true;
+    const sessionId = recordingSessionRef.current + 1;
+    recordingSessionRef.current = sessionId;
     chunksRef.current = [];
     speechHeardRef.current = false;
     lastSpeechRef.current = 0;
@@ -90,7 +129,8 @@ export default function QuickGematriaOverlay() {
 
       streamRef.current = stream;
 
-      const recorder = new MediaRecorder(stream);
+      const mimeType = supportedRecorderMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       recorderRef.current = recorder;
       startedRef.current = performance.now();
 
@@ -101,18 +141,26 @@ export default function QuickGematriaOverlay() {
       };
 
       recorder.onstop = async () => {
+        if (recordingSessionRef.current !== sessionId) {
+          return;
+        }
+
+        isRecordingRef.current = false;
+        isStartingRef.current = false;
         setRecording(false);
-        setStatus("Transcribing…");
+        stopMedia();
 
         const blob = new Blob(chunksRef.current, {
           type: recorder.mimeType || "audio/webm",
         });
 
-        const bytes = Array.from(
-          new Uint8Array(await blob.arrayBuffer()),
-        );
+        if (blob.size < MIN_AUDIO_BYTES) {
+          setStatus("No usable audio captured. You can still type.");
+          return;
+        }
 
-        stopMedia();
+        setStatus("Transcribing...");
+        const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
 
         try {
           const response = await api.transcribe({
@@ -132,10 +180,13 @@ export default function QuickGematriaOverlay() {
       };
 
       recorder.start(200);
+      isStartingRef.current = false;
+      isRecordingRef.current = true;
       setRecording(true);
-      setStatus("Listening…");
+      setStatus("Listening...");
 
       const context = new AudioContext();
+      audioContextRef.current = context;
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 1024;
@@ -167,7 +218,6 @@ export default function QuickGematriaOverlay() {
           now - lastSpeechRef.current >= SILENCE_AFTER_SPEECH_MS;
 
         if (silenceReached || maxReached) {
-          void context.close();
           finishRecording();
           return;
         }
@@ -177,6 +227,8 @@ export default function QuickGematriaOverlay() {
 
       frameRef.current = requestAnimationFrame(monitor);
     } catch (error) {
+      isStartingRef.current = false;
+      isRecordingRef.current = false;
       stopMedia();
       setRecording(false);
       setStatus(`Microphone unavailable: ${String(error)}`);
@@ -187,14 +239,27 @@ export default function QuickGematriaOverlay() {
     const api = desktopApi();
     if (!api) return;
 
-    const removeOpened = api.onOpened(() => {
-      window.setTimeout(() => {
+    const autoStartTimers = new Set<number>();
+    const queueAutoStart = (delayMs: number) => {
+      const timer = window.setTimeout(() => {
+        autoStartTimers.delete(timer);
         void startRecording();
-      }, 100);
-    });
+      }, delayMs);
+      autoStartTimers.add(timer);
+    };
+
+    const removeOpened = autoStart
+      ? api.onOpened(() => {
+          queueAutoStart(100);
+        })
+      : undefined;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (hideOnEscape && event.key === "Escape") {
+        recordingSessionRef.current += 1;
+        isStartingRef.current = false;
+        isRecordingRef.current = false;
+        finishRecording();
         stopMedia();
         void api.hide();
       }
@@ -202,20 +267,27 @@ export default function QuickGematriaOverlay() {
 
     window.addEventListener("keydown", onKeyDown);
 
-    window.setTimeout(() => {
-      void startRecording();
-    }, 250);
+    if (autoStart) {
+      queueAutoStart(250);
+    }
 
     return () => {
+      autoStartTimers.forEach((timer) => window.clearTimeout(timer));
       removeOpened?.();
       window.removeEventListener("keydown", onKeyDown);
+      recordingSessionRef.current += 1;
+      isStartingRef.current = false;
+      isRecordingRef.current = false;
+      finishRecording();
       stopMedia();
     };
-  }, [startRecording, stopMedia]);
+  }, [autoStart, finishRecording, hideOnEscape, startRecording, stopMedia]);
+
+  const isEmbedded = variant === "embedded";
 
   return (
-    <main className="min-h-screen bg-base-200 p-5">
-      <section className="mx-auto flex min-h-[480px] max-w-2xl flex-col rounded-3xl bg-base-100 p-6 shadow-2xl">
+    <main className={isEmbedded ? "w-full" : "min-h-screen bg-base-200 p-5"}>
+      <section className={isEmbedded ? "flex min-h-[480px] max-w-3xl flex-col rounded-box border border-base-300 bg-base-100 p-6 shadow-sm" : "mx-auto flex min-h-[480px] max-w-2xl flex-col rounded-3xl bg-base-100 p-6 shadow-2xl"}>
         <header className="mb-5 flex items-start justify-between gap-5">
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.22em] opacity-55">
@@ -279,9 +351,11 @@ export default function QuickGematriaOverlay() {
           </div>
         </div>
 
-        <div className="mt-auto pt-6 text-center text-xs opacity-45">
-          Ctrl+Alt+G opens Quick Gematria · Esc hides it
-        </div>
+        {isEmbedded ? null : (
+          <div className="mt-auto pt-6 text-center text-xs opacity-45">
+            Ctrl+Alt+G opens Quick Gematria · Esc hides it
+          </div>
+        )}
       </section>
     </main>
   );

@@ -3,6 +3,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { HomePage } from "./pages/HomePage";
 import { AudioJournalPage } from "./pages/AudioJournalPage";
 import { VoiceLabPage } from "./pages/VoiceLabPage";
+import { QuickGematriaPage } from "./pages/QuickGematriaPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SystemHealthPage } from "./pages/SystemHealthPage";
 import { LocalAiSetupPage } from "./pages/LocalAiSetupPage";
@@ -19,6 +20,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/audio-journal" element={<AudioJournalPage />} />
           <Route path="/listen-commands" element={<ListenCommandsPage />} />
+          <Route path="/quick-gematria" element={<QuickGematriaPage />} />
           <Route path="/voice-lab" element={<VoiceLabPage />} />
           <Route path="/local-ai-setup" element={<LocalAiSetupPage />} />
           <Route path="/clone-app" element={<AppClonerPage />} />

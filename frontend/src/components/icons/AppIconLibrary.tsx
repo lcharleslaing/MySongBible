@@ -4,6 +4,7 @@ export type AppIconName =
   | "activity"
   | "bot"
   | "briefcase"
+  | "calculator"
   | "clone"
   | "home"
   | "menu"
@@ -24,6 +25,7 @@ export const appIconLibrary: IconDefinition[] = [
   { name: "mic", label: "Microphone", paths: ["M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z", "M5 11a7 7 0 0 0 14 0", "M12 18v3", "M8 21h8"] },
   { name: "settings", label: "Settings", paths: ["M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z", "M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7.7 7.7 0 0 0-2-1.2L14.2 3h-4.4l-.3 2.6a7.7 7.7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 0 0 2 1.2l.3 2.6h4.4l.3-2.6a7.7 7.7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2Z"] },
   { name: "activity", label: "Activity", paths: ["M3 12h4l2-7 6 14 2-7h4"] },
+  { name: "calculator", label: "Calculator", paths: ["M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z", "M8 7h8", "M8 11h.01", "M12 11h.01", "M16 11h.01", "M8 15h.01", "M12 15h.01", "M16 15h.01"] },
   { name: "clone", label: "Clone", paths: ["M8 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z", "M4 16H3a1 1 0 0 1-1-1V4a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v1"] },
   { name: "waveform", label: "Waveform", paths: ["M3 12h2", "M7 7v10", "M11 4v16", "M15 8v8", "M19 10v4", "M21 12h-2"] },
   { name: "bot", label: "Bot", paths: ["M12 8V4", "M8 4h8", "M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z", "M9 14h.01", "M15 14h.01", "M9 18h6"] },
