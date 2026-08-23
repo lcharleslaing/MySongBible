@@ -3,11 +3,19 @@ const { app, BrowserWindow, dialog, ipcMain, nativeImage, screen, shell } = requ
 
 const { registerDesktopIpc } = require("./ipc.cjs");
 const { startBackendProcess, stopBackendProcess } = require("./backend.cjs");
+const {
+  DEFAULT_HOTKEY,
+  isBackgroundLaunch,
+  registerQuickGematriaHotkey,
+  registerQuickGematriaIpc,
+  unregisterQuickGematriaHotkey,
+} = require("./features/quick-gematria.cjs");
 
 const isDev = !app.isPackaged;
 const rendererUrl = process.env.ELECTRON_RENDERER_URL || "http://127.0.0.1:5173";
 const useLocalDist = process.env.APP_TEMPLATE_RENDERER_MODE === "dist";
 const smokeMode = process.env.APP_TEMPLATE_SMOKE === "1";
+const backgroundMode = isBackgroundLaunch();
 
 if (smokeMode || process.env.APP_TEMPLATE_DISABLE_CHROMIUM_SANDBOX === "1") {
   app.commandLine.appendSwitch("no-sandbox");
@@ -183,8 +191,24 @@ async function bootstrap() {
     shell,
     backendController,
   });
+  registerQuickGematriaIpc();
 
-  mainWindow = createMainWindow();
+  const quickGematriaOptions = {
+    preloadPath: path.join(__dirname, "..", "preload", "index.cjs"),
+    iconPath: path.join(__dirname, "..", "assets", "icons", "icon.png"),
+    devServerUrl: isDev && !useLocalDist ? rendererUrl : null,
+    rendererDistPath: path.join(app.getAppPath(), "frontend", "dist"),
+  };
+
+  try {
+    registerQuickGematriaHotkey(quickGematriaOptions, DEFAULT_HOTKEY);
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
+
+  if (!backgroundMode) {
+    mainWindow = createMainWindow();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -194,13 +218,15 @@ async function bootstrap() {
 }
 
 app.on("window-all-closed", async () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && !backgroundMode) {
     await stopBackendProcess(backendController);
     app.quit();
   }
 });
 
 app.on("before-quit", async () => {
+  app.isQuitting = true;
+  unregisterQuickGematriaHotkey();
   await stopBackendProcess(backendController);
 });
 

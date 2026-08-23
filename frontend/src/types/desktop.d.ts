@@ -72,6 +72,16 @@ declare global {
         path: string | null;
       }>;
     };
+    quickGematria: {
+      calculate: (input: string) => Promise<QuickGematriaResult>;
+      transcribe: (payload: QuickGematriaTranscribePayload) => Promise<{
+        text: string;
+      }>;
+      hide: () => Promise<{ ok: boolean }>;
+      onOpened: (callback: () => void) => () => void;
+      getAutostart: () => Promise<QuickGematriaAutostartSettings>;
+      setAutostart: (enabled: boolean) => Promise<QuickGematriaAutostartSettings>;
+    };
   }
 
   type PackageArtifact = {
@@ -161,5 +171,43 @@ declare global {
   type LocalAiActionResult = LocalAiStatusResult & {
     ok: boolean;
     message: string;
+  };
+
+  type QuickGematriaBreakdown = {
+    character: string;
+    simple: number;
+    english: number;
+    jewish: number;
+  };
+
+  type QuickGematriaResult = {
+    input: string;
+    normalized: string;
+    simple: number;
+    english: number;
+    jewish: number;
+    breakdown: QuickGematriaBreakdown[];
+  };
+
+  type QuickGematriaTranscribePayload = {
+    audioBytes: number[];
+    mimeType: string;
+  };
+
+  type QuickGematriaAutostartSettings = {
+    openAtLogin: boolean;
+    openAsHidden?: boolean;
+    wasOpenedAtLogin?: boolean;
+    wasOpenedAsHidden?: boolean;
+    restoreState?: boolean;
+    status?: string;
+    executableWillLaunchAtLogin?: boolean;
+    launchItems?: Array<{
+      name: string;
+      path: string;
+      args: string[];
+      scope?: string;
+      enabled?: boolean;
+    }>;
   };
 }

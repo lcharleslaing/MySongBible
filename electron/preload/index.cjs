@@ -29,3 +29,16 @@ contextBridge.exposeInMainWorld("desktop", {
   pickAudioOutputDirectory: () => ipcRenderer.invoke("desktop:pick-audio-output-directory"),
   pickCloneDirectory: () => ipcRenderer.invoke("desktop:pick-clone-directory"),
 });
+
+contextBridge.exposeInMainWorld("quickGematria", {
+  calculate: (input) => ipcRenderer.invoke("quick-gematria:calculate", input),
+  transcribe: (payload) => ipcRenderer.invoke("quick-gematria:transcribe", payload),
+  hide: () => ipcRenderer.invoke("quick-gematria:hide"),
+  onOpened: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("quick-gematria:opened", listener);
+    return () => ipcRenderer.removeListener("quick-gematria:opened", listener);
+  },
+  getAutostart: () => ipcRenderer.invoke("quick-gematria:get-autostart"),
+  setAutostart: (enabled) => ipcRenderer.invoke("quick-gematria:set-autostart", { enabled }),
+});
