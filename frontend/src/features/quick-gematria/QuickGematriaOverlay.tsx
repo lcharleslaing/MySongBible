@@ -25,6 +25,15 @@ function supportedRecorderMimeType() {
   return RECORDER_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
 }
 
+function cleanSpeechText(value: string) {
+  return value
+    .replace(/\[(?:blank[_\s-]*audio|silence|music)\]|\((?:blank[_\s-]*audio|silence|music)\)/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,.;:!?-]+/, "")
+    .replace(/[\s,;:-]+$/, "")
+    .trim();
+}
+
 type QuickGematriaOverlayProps = {
   autoStart?: boolean;
   hideOnEscape?: boolean;
@@ -168,7 +177,7 @@ export default function QuickGematriaOverlay({
             mimeType: blob.type || "audio/webm",
           });
 
-          const recognized = response.text?.trim() || "";
+          const recognized = cleanSpeechText(response.text || "");
           setText(recognized);
           setStatus(recognized ? "Calculated" : "No speech recognized");
         } catch (error) {

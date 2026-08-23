@@ -146,14 +146,23 @@ function concatFloat32(chunks: Float32Array[]) {
 }
 
 function isNonSpeechText(value: string) {
-  const cleaned = value.trim();
+  const cleaned = cleanSpeechText(value);
   if (!cleaned) {
     return true;
   }
-  if (["[blank_audio]", "[silence]", "(silence)", "silence", "[music]", "(music)"].includes(cleaned.toLowerCase())) {
+  if (["blank_audio", "blank audio", "silence", "music"].includes(cleaned.toLowerCase().replace(/[_-]+/g, " "))) {
     return true;
   }
   return !/[\w]/u.test(cleaned);
+}
+
+function cleanSpeechText(value: string) {
+  return value
+    .replace(/\[(?:blank[_\s-]*audio|silence|music)\]|\((?:blank[_\s-]*audio|silence|music)\)/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,.;:!?-]+/, "")
+    .replace(/[\s,;:-]+$/, "")
+    .trim();
 }
 
 function formatDate(value: string | null | undefined) {
@@ -293,7 +302,7 @@ export function ListenCommandsPage() {
       title: "Command description dictation",
     })
       .then((transcript) => {
-        const spoken = transcript.transcript_text.trim();
+        const spoken = cleanSpeechText(transcript.transcript_text);
         if (!spoken) return;
         const { start, end } = descriptionSelectionRef.current;
         setTriggerForm((form) => ({
@@ -556,7 +565,7 @@ export function ListenCommandsPage() {
           fileName: `listen-commands-${session.id}-${chunkIndexRef.current++}.wav`,
           title: `${session.title} live chunk`,
         });
-        const text = transcript.transcript_text.trim();
+        const text = cleanSpeechText(transcript.transcript_text);
         if (isNonSpeechText(text)) {
           continue;
         }

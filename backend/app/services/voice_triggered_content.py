@@ -35,6 +35,7 @@ from app.schemas.voice_triggered_content import (
     VoiceTriggerCreate,
     VoiceTriggerUpdate,
 )
+from app.services.stt import clean_transcription_text
 
 
 DEFAULT_COOLDOWN_SECONDS = 4.0
@@ -513,11 +514,9 @@ class VoiceTriggeredContentService:
 
     @staticmethod
     def _clean_speech_text(text: str) -> str:
-        cleaned = re.sub(r"\s+", " ", text).strip()
+        cleaned = clean_transcription_text(text)
         cleaned = re.sub(r"^[\s,.;:!?-]+", "", cleaned)
         cleaned = re.sub(r"[\s,;:-]+$", "", cleaned)
-        if cleaned.casefold() in {"[blank_audio]", "[silence]", "(silence)", "silence", "[music]", "(music)"}:
-            return ""
         if not re.search(r"[\w]", cleaned, flags=re.UNICODE):
             return ""
         return cleaned.strip()

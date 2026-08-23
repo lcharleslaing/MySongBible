@@ -21,18 +21,29 @@ class SttUploadError(ValueError):
 
 
 NON_SPEECH_MARKERS = {
+    "blank_audio",
+    "blank audio",
     "[blank_audio]",
+    "[blank audio]",
     "[silence]",
     "(silence)",
+    "(blank_audio)",
+    "(blank audio)",
     "silence",
     "[music]",
     "(music)",
 }
+NON_SPEECH_MARKER_PATTERN = re.compile(
+    r"(?:\[(?:blank[_\s-]*audio|silence|music)\]|\((?:blank[_\s-]*audio|silence|music)\))",
+    flags=re.IGNORECASE,
+)
 
 
 def clean_transcription_text(value: str | None) -> str:
-    text = (value or "").strip()
+    text = NON_SPEECH_MARKER_PATTERN.sub(" ", value or "")
     normalized = re.sub(r"\s+", " ", text).strip()
+    normalized = re.sub(r"^[\s,.;:!?-]+", "", normalized)
+    normalized = re.sub(r"[\s,;:-]+$", "", normalized).strip()
     if not normalized:
         return ""
     if normalized.casefold() in NON_SPEECH_MARKERS:

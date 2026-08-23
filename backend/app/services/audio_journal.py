@@ -20,7 +20,7 @@ from app.schemas.audio_journal import (
     AudioJournalTrainingCandidateUpdate,
 )
 from app.services.audio_quality import AudioQualityAnalyzer
-from app.services.stt import SttService, SttUploadError
+from app.services.stt import SttService, SttUploadError, clean_transcription_text
 
 
 def utc_now() -> datetime:
@@ -358,7 +358,7 @@ class AudioJournalService:
             self.session.refresh(take)
             raise
 
-        transcript_text = transcription.text.strip()
+        transcript_text = clean_transcription_text(transcription.text)
         take.transcript_text = transcript_text
         take.transcript_source = "whisper"
         take.transcription_status = "completed"

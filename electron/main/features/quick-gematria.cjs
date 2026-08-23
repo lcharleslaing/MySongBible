@@ -19,6 +19,13 @@ const DEFAULT_HOTKEY = "CommandOrControl+Alt+G";
 const QUICK_WINDOW_LABEL = "quick-gematria";
 const MUSIC_WHISPER_BASE_URL = "http://127.0.0.1:8091";
 const MIN_AUDIO_BYTES = 512;
+const NON_SPEECH_MARKER_PATTERN = /(?:\[(?:blank[_\s-]*audio|silence|music)\]|\((?:blank[_\s-]*audio|silence|music)\))/gi;
+const NON_SPEECH_ONLY = new Set([
+  "blank_audio",
+  "blank audio",
+  "silence",
+  "music",
+]);
 
 let quickWindow = null;
 let registeredHotkey = null;
@@ -184,11 +191,41 @@ function extensionForMime(mimeType) {
   return "webm";
 }
 
+function cleanTranscriptionText(value) {
+  let text = String(value || "").replace(NON_SPEECH_MARKER_PATTERN, " ");
+  text = text.replace(/\s+/g, " ").trim();
+  text = text.replace(/^[\s,.;:!?-]+/, "").replace(/[\s,;:-]+$/, "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  if (NON_SPEECH_ONLY.has(normalizeForNonSpeechOnly(text))) {
+    return "";
+  }
+
+  if (!/[\w]/u.test(text)) {
+    return "";
+  }
+
+  return text;
+}
+
+function normalizeForNonSpeechOnly(value) {
+  return String(value || "")
+    .replace(/^[\s[(]+|[\s)\]]+$/g, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function extractTextFromWhisperResponse(payload) {
   for (const key of ["text", "transcript", "transcription"]) {
     const value = payload?.[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
+    const cleaned = cleanTranscriptionText(value);
+    if (cleaned) {
+      return cleaned;
     }
   }
 
@@ -196,10 +233,11 @@ function extractTextFromWhisperResponse(payload) {
     const text = payload.segments
       .map((segment) => segment?.text)
       .filter((value) => typeof value === "string" && value.trim())
-      .map((value) => value.trim())
+      .map((value) => cleanTranscriptionText(value))
+      .filter(Boolean)
       .join(" ");
 
-    if (text) return text;
+    if (text) return cleanTranscriptionText(text);
   }
 
   return "";
@@ -292,11 +330,11 @@ async function transcribeWithMusicWhisper({ audioBytes, mimeType }) {
       const txt = files.find((name) => name.toLowerCase().endsWith(".txt"));
 
       if (txt) {
-        text = (await fs.readFile(path.join(tempDir, txt), "utf8")).trim();
+        text = cleanTranscriptionText(await fs.readFile(path.join(tempDir, txt), "utf8"));
       }
     }
 
-    return { text };
+    return { text: cleanTranscriptionText(text) };
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

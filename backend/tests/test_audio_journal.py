@@ -626,6 +626,17 @@ def test_audio_journal_transcribe_updates_take_transcript_status_and_engine(clie
     assert take["transcription_model"] == "ggml-base.en.bin"
 
 
+def test_audio_journal_transcribe_removes_non_speech_markers(client, tmp_path: Path) -> None:
+    payload = create_entry(client, tmp_path)
+    entry_id = payload["entry"]["id"]
+    take_id = payload["take"]["id"]
+
+    response = transcribe_take(client, tmp_path, entry_id, take_id, FakeWhisperTranscriber("I love myself. [BLANK_AUDIO]"))
+
+    assert response.status_code == 200
+    assert response.json()["take"]["transcript_text"] == "I love myself."
+
+
 def test_audio_journal_transcribe_converts_non_wav_take_before_whisper(client, tmp_path: Path, monkeypatch) -> None:
     payload = create_entry(client, tmp_path, audio=b"mp3", filename="journal.mp3")
     entry_id = payload["entry"]["id"]

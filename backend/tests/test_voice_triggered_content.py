@@ -60,6 +60,8 @@ def test_blank_audio_markers_are_not_persisted(client) -> None:
 def test_stt_cleaner_removes_known_non_speech_markers() -> None:
     assert clean_transcription_text("[BLANK_AUDIO]") == ""
     assert clean_transcription_text("[SILENCE]") == ""
+    assert clean_transcription_text("I love myself. [BLANK_AUDIO]") == "I love myself."
+    assert clean_transcription_text("[SILENCE] I love myself. (music)") == "I love myself."
     assert clean_transcription_text(" ... ") == ""
     assert clean_transcription_text(" Sample sample. ") == "Sample sample."
 
