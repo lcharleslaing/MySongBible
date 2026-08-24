@@ -6,6 +6,7 @@ from app.api.routes.audio_journal import router as audio_journal_router
 from app.api.routes.audio import router as audio_router
 from app.api.routes.health import router as health_router
 from app.api.routes.settings import router as settings_router
+from app.api.routes.song_catalog import router as song_catalog_router
 from app.api.routes.stt import router as stt_router
 from app.api.routes.tts import router as tts_router
 from app.api.routes.transcripts import router as transcripts_router
@@ -20,6 +21,7 @@ api_router.include_router(audio_journal_router)
 api_router.include_router(audio_router)
 api_router.include_router(health_router)
 api_router.include_router(settings_router)
+api_router.include_router(song_catalog_router)
 api_router.include_router(voice_router)
 api_router.include_router(voice_triggered_content_router)
 api_router.include_router(voice_profiles_router)
